@@ -995,10 +995,22 @@ if(-NOT[string]::IsNullOrEmpty($Xml)) {
         $LogoImageFileName = $Xml.Configuration.Option | Where-Object {$_.Name -like 'LogoImageName'} | Select-Object -ExpandProperty 'Value'
         $HeroImageFileName = $Xml.Configuration.Option | Where-Object {$_.Name -like 'HeroImageName'} | Select-Object -ExpandProperty 'Value'
         # Rewriting image variables to cater for images being hosted online, as well as being hosted locally.
-        # Needed image including path in one variable
-        if ((-NOT[string]::IsNullOrEmpty($LogoImageFileName)) -OR (-NOT[string]::IsNullOrEmpty($HeroImageFileName)))  {
-            $LogoImage = $ImagesPath + "/" + $LogoImageFileName
-            $HeroImage = $ImagesPath + "/" + $HeroImageFileName
+        # Needed image including path in one variable.
+        # When the value is already an absolute local path (e.g. C:\...) use file:/// directly;
+        # otherwise prefix with the script's Images folder path.
+        if (-NOT[string]::IsNullOrEmpty($LogoImageFileName)) {
+            if ([System.IO.Path]::IsPathRooted($LogoImageFileName)) {
+                $LogoImage = "file:///" + $LogoImageFileName.Replace('\', '/')
+            } else {
+                $LogoImage = $ImagesPath + "/" + $LogoImageFileName
+            }
+        }
+        if (-NOT[string]::IsNullOrEmpty($HeroImageFileName)) {
+            if ([System.IO.Path]::IsPathRooted($HeroImageFileName)) {
+                $HeroImage = "file:///" + $HeroImageFileName.Replace('\', '/')
+            } else {
+                $HeroImage = $ImagesPath + "/" + $HeroImageFileName
+            }
         }
         $Scenario = $Xml.Configuration.Option | Where-Object {$_.Name -like 'Scenario'} | Select-Object -ExpandProperty 'Type'
         $Action1 = $Xml.Configuration.Option | Where-Object {$_.Name -like 'Action1'} | Select-Object -ExpandProperty 'Value'
@@ -1032,28 +1044,30 @@ if(-NOT[string]::IsNullOrEmpty($Xml)) {
             $XmlLang = $xml.Configuration.$defaultUserCulture
         }
         # Load Toast Notification text
-        $PendingRebootUptimeTextValue = $XmlLang.Text | Where-Object {$_.Name -like 'PendingRebootUptimeText'} | Select-Object -ExpandProperty '#text'
-        $WeeklyMessageTitleText = $XmlLang.Text | Where-Object {$_.Name -like 'WeeklyMessageTitle'} | Select-Object -ExpandProperty '#text'
-        $WeeklyMessageBodyText = $XmlLang.Text | Where-Object {$_.Name -like 'WeeklyMessageBody'} | Select-Object -ExpandProperty '#text'
-        $ActionButton1Content = $XmlLang.Text | Where-Object {$_.Name -like 'ActionButton1'} | Select-Object -ExpandProperty '#text'
-        $ActionButton2Content = $XmlLang.Text | Where-Object {$_.Name -like 'ActionButton2'} | Select-Object -ExpandProperty '#text'
-        $DismissButtonContent = $XmlLang.Text | Where-Object {$_.Name -like 'DismissButton'} | Select-Object -ExpandProperty '#text'
-        $SnoozeButtonContent = $XmlLang.Text | Where-Object {$_.Name -like 'SnoozeButton'} | Select-Object -ExpandProperty '#text'
-        $AttributionText = $XmlLang.Text | Where-Object {$_.Name -like 'AttributionText'} | Select-Object -ExpandProperty '#text'
-        $HeaderText = $XmlLang.Text | Where-Object {$_.Name -like 'HeaderText'} | Select-Object -ExpandProperty '#text'
-        $TitleText = $XmlLang.Text | Where-Object {$_.Name -like 'TitleText'} | Select-Object -ExpandProperty '#text'
-        $BodyText1 = $XmlLang.Text | Where-Object {$_.Name -like 'BodyText1'} | Select-Object -ExpandProperty '#text'
-        $BodyText2 = $XmlLang.Text | Where-Object {$_.Name -like 'BodyText2'} | Select-Object -ExpandProperty '#text'
-        $SnoozeText = $XmlLang.Text | Where-Object {$_.Name -like 'SnoozeText'} | Select-Object -ExpandProperty '#text'
+        # Use ForEach-Object { $_.InnerText } instead of Select-Object -ExpandProperty '#text'
+        # to safely handle empty XML elements (which have no #text child node).
+        $PendingRebootUptimeTextValue = $XmlLang.Text | Where-Object {$_.Name -like 'PendingRebootUptimeText'} | ForEach-Object { $_.InnerText }
+        $WeeklyMessageTitleText = $XmlLang.Text | Where-Object {$_.Name -like 'WeeklyMessageTitle'} | ForEach-Object { $_.InnerText }
+        $WeeklyMessageBodyText = $XmlLang.Text | Where-Object {$_.Name -like 'WeeklyMessageBody'} | ForEach-Object { $_.InnerText }
+        $ActionButton1Content = $XmlLang.Text | Where-Object {$_.Name -like 'ActionButton1'} | ForEach-Object { $_.InnerText }
+        $ActionButton2Content = $XmlLang.Text | Where-Object {$_.Name -like 'ActionButton2'} | ForEach-Object { $_.InnerText }
+        $DismissButtonContent = $XmlLang.Text | Where-Object {$_.Name -like 'DismissButton'} | ForEach-Object { $_.InnerText }
+        $SnoozeButtonContent = $XmlLang.Text | Where-Object {$_.Name -like 'SnoozeButton'} | ForEach-Object { $_.InnerText }
+        $AttributionText = $XmlLang.Text | Where-Object {$_.Name -like 'AttributionText'} | ForEach-Object { $_.InnerText }
+        $HeaderText = $XmlLang.Text | Where-Object {$_.Name -like 'HeaderText'} | ForEach-Object { $_.InnerText }
+        $TitleText = $XmlLang.Text | Where-Object {$_.Name -like 'TitleText'} | ForEach-Object { $_.InnerText }
+        $BodyText1 = $XmlLang.Text | Where-Object {$_.Name -like 'BodyText1'} | ForEach-Object { $_.InnerText }
+        $BodyText2 = $XmlLang.Text | Where-Object {$_.Name -like 'BodyText2'} | ForEach-Object { $_.InnerText }
+        $SnoozeText = $XmlLang.Text | Where-Object {$_.Name -like 'SnoozeText'} | ForEach-Object { $_.InnerText }
 	    # Note: Removed DeadlineText for simplified configuration
-	    $GreetMorningText = $XmlLang.Text | Where-Object {$_.Name -like 'GreetMorningText'} | Select-Object -ExpandProperty '#text'
-	    $GreetAfternoonText = $XmlLang.Text | Where-Object {$_.Name -like 'GreetAfternoonText'} | Select-Object -ExpandProperty '#text'
-	    $GreetEveningText = $XmlLang.Text | Where-Object {$_.Name -like 'GreetEveningText'} | Select-Object -ExpandProperty '#text'
-	    $MinutesText = $XmlLang.Text | Where-Object {$_.Name -like 'MinutesText'} | Select-Object -ExpandProperty '#text'
-	    $HourText = $XmlLang.Text | Where-Object {$_.Name -like 'HourText'} | Select-Object -ExpandProperty '#text'
-        $HoursText = $XmlLang.Text | Where-Object {$_.Name -like 'HoursText'} | Select-Object -ExpandProperty '#text'
-	    $ComputerUptimeText = $XmlLang.Text | Where-Object {$_.Name -like 'ComputerUptimeText'} | Select-Object -ExpandProperty '#text'
-        $ComputerUptimeDaysText = $XmlLang.Text | Where-Object {$_.Name -like 'ComputerUptimeDaysText'} | Select-Object -ExpandProperty '#text'
+	    $GreetMorningText = $XmlLang.Text | Where-Object {$_.Name -like 'GreetMorningText'} | ForEach-Object { $_.InnerText }
+	    $GreetAfternoonText = $XmlLang.Text | Where-Object {$_.Name -like 'GreetAfternoonText'} | ForEach-Object { $_.InnerText }
+	    $GreetEveningText = $XmlLang.Text | Where-Object {$_.Name -like 'GreetEveningText'} | ForEach-Object { $_.InnerText }
+	    $MinutesText = $XmlLang.Text | Where-Object {$_.Name -like 'MinutesText'} | ForEach-Object { $_.InnerText }
+	    $HourText = $XmlLang.Text | Where-Object {$_.Name -like 'HourText'} | ForEach-Object { $_.InnerText }
+        $HoursText = $XmlLang.Text | Where-Object {$_.Name -like 'HoursText'} | ForEach-Object { $_.InnerText }
+	    $ComputerUptimeText = $XmlLang.Text | Where-Object {$_.Name -like 'ComputerUptimeText'} | ForEach-Object { $_.InnerText }
+        $ComputerUptimeDaysText = $XmlLang.Text | Where-Object {$_.Name -like 'ComputerUptimeDaysText'} | ForEach-Object { $_.InnerText }
         Write-Log -Message "Successfully loaded xml content from $Config"
     }
     catch {
