@@ -199,9 +199,13 @@ function New-ToastXmlFromTags {
         $heroPath = Join-Path $ImageBasePath $heroFile
         $logoPath = Join-Path $ImageBasePath $logoFile
 
-        # Set HeroImageName and LogoImageName Option values
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }).Value = $heroPath
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }).Value = $logoPath
+        # Set HeroImageName and LogoImageName Option values using SetAttribute to avoid
+        # conflicts with the read-only XmlNode.Value .NET property when using the
+        # PowerShell XML type adapter.
+        $heroNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }
+        if ($null -ne $heroNode) { $heroNode.SetAttribute('Value', $heroPath) }
+        $logoNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }
+        if ($null -ne $logoNode) { $logoNode.SetAttribute('Value', $logoPath) }
     }
 
     # ---- Tag-to-XML mapping for text nodes in en-US ----
@@ -238,15 +242,16 @@ function New-ToastXmlFromTags {
         if ($null -ne $optNode) { $optNode.Enabled = 'True' }
     }
 
-    # ---- Option-level tags ----
     # HeroImage (explicit override takes precedence over Urgency)
     if ($Tags.ContainsKey('HeroImage')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }).Value = $Tags['HeroImage']
+        $heroNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }
+        if ($null -ne $heroNode) { $heroNode.SetAttribute('Value', $Tags['HeroImage']) }
     }
 
     # LogoImage (explicit override takes precedence over Urgency)
     if ($Tags.ContainsKey('LogoImage')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }).Value = $Tags['LogoImage']
+        $logoNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }
+        if ($null -ne $logoNode) { $logoNode.SetAttribute('Value', $Tags['LogoImage']) }
     }
 
     # Scenario
@@ -256,12 +261,14 @@ function New-ToastXmlFromTags {
 
     # Action (Action1)
     if ($Tags.ContainsKey('Action')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'Action1' }).Value = $Tags['Action']
+        $actionNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'Action1' }
+        if ($null -ne $actionNode) { $actionNode.SetAttribute('Value', $Tags['Action']) }
     }
 
     # Action2
     if ($Tags.ContainsKey('Action2')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'Action2' }).Value = $Tags['Action2']
+        $action2Node = $xml.Configuration.Option | Where-Object { $_.Name -eq 'Action2' }
+        if ($null -ne $action2Node) { $action2Node.SetAttribute('Value', $Tags['Action2']) }
     }
 
     return $xml
@@ -528,29 +535,41 @@ foreach ($deployment in $deployments) {
     # Generate the in-memory XML configuration
     $xml = New-ToastXmlFromTags -Tags $tags -BaseTemplatePath $BaseTemplatePath
 
-    # Save XML to a temp file
-    $tempConfig = Join-Path $env:TEMP "toast-config-$(Get-Random).xml"
+    # Save XML to a temp file using GetTempPath() (long path) to avoid 8.3 short-name
+    # issues (e.g. AFDE3~1.MAB) that cause Remove-Item to fail on some systems.
+    $tempConfig = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "toast-config-$(Get-Random).xml")
     $xml.Save($tempConfig)
 
     # Invoke the toast engine
+    $toastSuccess = $false
     try {
         Write-ToastLog -Message "Invoking toast for '$($deployment.Name)'..."
         powershell.exe -ExecutionPolicy Bypass -Command "& '$RemediateScriptPath' -Config '$tempConfig'"
+        $toastSuccess = ($LASTEXITCODE -eq 0)
+        if (-not $toastSuccess) {
+            Write-ToastLog -Message "Toast engine exited with code $LASTEXITCODE for '$($deployment.Name)'."
+        }
     }
     catch {
         Write-ToastLog -Message "Failed to invoke toast for '$($deployment.Name)': $_"
     }
 
-    # Record toast as shown
-    Set-ToastShown -DeploymentName $deployment.Name -Description $deployment.Description
-
     # Clean up temp config file
-    if (Test-Path -Path $tempConfig) {
-        Remove-Item -Path $tempConfig -Force -ErrorAction SilentlyContinue
+    try {
+        if (Test-Path -Path $tempConfig) {
+            Remove-Item -Path $tempConfig -Force -ErrorAction Stop
+        }
+    }
+    catch {
+        # Ignore cleanup failures - temp file will be cleaned up by the OS eventually
     }
 
-    $toastCount++
-    Write-ToastLog -Message "Toast displayed for '$($deployment.Name)'."
+    # Record toast as shown and update count only when the toast was actually displayed
+    if ($toastSuccess) {
+        Set-ToastShown -DeploymentName $deployment.Name -Description $deployment.Description
+        $toastCount++
+        Write-ToastLog -Message "Toast displayed for '$($deployment.Name)'."
+    }
 }
 
 Write-ToastLog -Message "Completed. $toastCount toast(s) displayed."

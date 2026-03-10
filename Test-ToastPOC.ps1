@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Validation script for testing the Toast Notification POC without a live SCCM environment.
 
@@ -71,8 +71,11 @@ function New-ToastXmlFromTags {
         }
         $heroPath = "$ImageBasePath\$heroFile"
         $logoPath = "$ImageBasePath\$logoFile"
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }).Value = $heroPath
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }).Value = $logoPath
+        # Use SetAttribute to avoid conflicts with the read-only XmlNode.Value .NET property.
+        $heroNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }
+        if ($null -ne $heroNode) { $heroNode.SetAttribute('Value', $heroPath) }
+        $logoNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }
+        if ($null -ne $logoNode) { $logoNode.SetAttribute('Value', $logoPath) }
     }
 
     # Tag-to-XML text mapping
@@ -107,19 +110,23 @@ function New-ToastXmlFromTags {
     }
 
     if ($Tags.ContainsKey('HeroImage')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }).Value = $Tags['HeroImage']
+        $heroNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'HeroImageName' }
+        if ($null -ne $heroNode) { $heroNode.SetAttribute('Value', $Tags['HeroImage']) }
     }
     if ($Tags.ContainsKey('LogoImage')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }).Value = $Tags['LogoImage']
+        $logoNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'LogoImageName' }
+        if ($null -ne $logoNode) { $logoNode.SetAttribute('Value', $Tags['LogoImage']) }
     }
     if ($Tags.ContainsKey('Scenario')) {
         ($xml.Configuration.Option | Where-Object { $_.Name -eq 'Scenario' }).Type = $Tags['Scenario']
     }
     if ($Tags.ContainsKey('Action')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'Action1' }).Value = $Tags['Action']
+        $actionNode = $xml.Configuration.Option | Where-Object { $_.Name -eq 'Action1' }
+        if ($null -ne $actionNode) { $actionNode.SetAttribute('Value', $Tags['Action']) }
     }
     if ($Tags.ContainsKey('Action2')) {
-        ($xml.Configuration.Option | Where-Object { $_.Name -eq 'Action2' }).Value = $Tags['Action2']
+        $action2Node = $xml.Configuration.Option | Where-Object { $_.Name -eq 'Action2' }
+        if ($null -ne $action2Node) { $action2Node.SetAttribute('Value', $Tags['Action2']) }
     }
 
     return $xml
@@ -289,7 +296,12 @@ foreach ($deployment in $mockDeployments) {
         try {
             Write-Host "`n  [LIVE] Invoking Remediate-ToastNotification.ps1..." -ForegroundColor Magenta
             powershell.exe -ExecutionPolicy Bypass -Command "& '$RemediateScriptPath' -Config '$tempConfig'"
-            Write-Host "  [PASS] Toast displayed for '$($deployment.Name)'." -ForegroundColor Green
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  [FAIL] Toast failed for '$($deployment.Name)' (exit code $LASTEXITCODE)." -ForegroundColor Red
+            } else {
+                Write-Host "  [PASS] Toast displayed for '$($deployment.Name)'." -ForegroundColor Green
+                $toastsDisplayed++
+            }
         }
         catch {
             Write-Host "  [FAIL] Failed to invoke toast: $_" -ForegroundColor Red
@@ -302,9 +314,8 @@ foreach ($deployment in $mockDeployments) {
     }
     else {
         Write-Host "`n  [PASS] Toast WOULD be displayed (dry run)." -ForegroundColor Green
+        $toastsDisplayed++
     }
-
-    $toastsDisplayed++
 }
 
 # =============================================================================
