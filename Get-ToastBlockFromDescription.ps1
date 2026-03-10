@@ -5,7 +5,7 @@
 #           using ConvertFrom-StringData, and resolves short-form aliases to
 #           their full tag names.
 #
-# Input:    [string] $Description – the full description text from an SCCM
+# Input:    [string] $Description - the full description text from an SCCM
 #           deployment (e.g. retrieved via Get-CimInstance).
 #
 # Output:   [hashtable] of resolved toast parameters, or $null when no
@@ -64,7 +64,7 @@ function Get-ToastBlockFromDescription {
         Where-Object { $_.Trim() -ne '' }
 
     if ($CleanedLines.Count -eq 0) {
-        Write-Warning "Toast block is empty – no Key=Value pairs found"
+        Write-Warning "Toast block is empty - no Key=Value pairs found"
         return $null
     }
 
