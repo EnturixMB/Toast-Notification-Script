@@ -19,6 +19,10 @@ function Test-ToastAlreadyShown {
     }
 
     # Read the tracking file
+    if ([string]::IsNullOrEmpty($env:APPDATA)) {
+        Write-Warning "APPDATA environment variable is not set. Cannot check toast tracking."
+        return $false
+    }
     $trackingDir = Join-Path -Path $env:APPDATA -ChildPath "ToastNotificationScript"
     $trackingFile = Join-Path -Path $trackingDir -ChildPath "ShownToasts.json"
 
@@ -62,6 +66,9 @@ function Set-ToastShown {
     }
 
     # Read the existing tracking file or create empty structure if missing
+    if ([string]::IsNullOrEmpty($env:APPDATA)) {
+        throw "APPDATA environment variable is not set. Cannot store toast tracking data."
+    }
     $trackingDir = Join-Path -Path $env:APPDATA -ChildPath "ToastNotificationScript"
     $trackingFile = Join-Path -Path $trackingDir -ChildPath "ShownToasts.json"
 
