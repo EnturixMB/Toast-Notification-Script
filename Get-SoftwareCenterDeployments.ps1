@@ -18,6 +18,7 @@ function Get-SoftwareCenterDeployments {
     .NOTES
         Uses Get-CimInstance (codebase convention — not Get-WmiObject).
     #>
+    [CmdletBinding()]
     param()
 
     $Namespace = 'root\ccm\ClientSDK'
@@ -87,7 +88,7 @@ function Get-SoftwareCenterDeployments {
     $available = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($dep in $allDeployments) {
         if ($dep.IsInstalled) {
-            Write-Warning "Deployment '$($dep.Name)' already installed — toast suppressed."
+            Write-Verbose "Deployment '$($dep.Name)' already installed — toast suppressed."
         }
         else {
             $available.Add($dep)
