@@ -87,7 +87,7 @@ function Get-ToastBlockFromDescription {
             $ResolvedData[$AliasMap[$TrimmedKey]] = $ParsedData[$Key]
         }
         else {
-            # Key is already a full tag name – keep as-is
+            # Key is already a full tag name - keep as-is
             $ResolvedData[$TrimmedKey] = $ParsedData[$Key]
         }
     }

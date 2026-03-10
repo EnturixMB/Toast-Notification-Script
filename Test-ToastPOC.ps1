@@ -23,7 +23,7 @@
     Runs the simulation and displays real toast notifications.
 
 .NOTES
-    POC Step 9 – End-to-End Validation
+    POC Step 9 - End-to-End Validation
 #>
 
 [CmdletBinding()]
@@ -172,7 +172,7 @@ function Test-ToastAlreadyShown {
 }
 
 # =============================================================================
-# Helper: Format-XmlPretty  –  pretty-prints an [xml] object
+# Helper: Format-XmlPretty  -  pretty-prints an [xml] object
 # =============================================================================
 function Format-XmlPretty {
     param([xml]$Xml)
@@ -217,7 +217,7 @@ $mockDeployments = @(
 # 2. Run through orchestrator logic step by step
 # =============================================================================
 Write-Host "`n=====================================================================" -ForegroundColor Cyan
-Write-Host "  Test-ToastPOC – End-to-End Validation (Mock Data)" -ForegroundColor Cyan
+Write-Host "  Test-ToastPOC - End-to-End Validation (Mock Data)" -ForegroundColor Cyan
 Write-Host "=====================================================================" -ForegroundColor Cyan
 
 # Summary counters
@@ -244,7 +244,7 @@ foreach ($deployment in $mockDeployments) {
         }
         $suppressedInstalled++
         Write-Host "  Status      : SUPPRESSED (already installed)" -ForegroundColor Yellow
-        Write-Host "  [SKIP] Toast suppressed – software is already installed." -ForegroundColor Yellow
+        Write-Host "  [SKIP] Toast suppressed - software is already installed." -ForegroundColor Yellow
         continue
     }
 
@@ -268,7 +268,7 @@ foreach ($deployment in $mockDeployments) {
     $isDuplicate = Test-ToastAlreadyShown -DeploymentName $deployment.Name -Description $deployment.Description
     if ($isDuplicate) {
         $suppressedDuplicate++
-        Write-Host "`n  Status      : SUPPRESSED (duplicate – already shown)" -ForegroundColor Yellow
+        Write-Host "`n  Status      : SUPPRESSED (duplicate - already shown)" -ForegroundColor Yellow
         Write-Host "  [SKIP] Toast was already displayed for this deployment." -ForegroundColor Yellow
         continue
     }
@@ -288,7 +288,7 @@ foreach ($deployment in $mockDeployments) {
         $xml.Save($tempConfig)
         try {
             Write-Host "`n  [LIVE] Invoking Remediate-ToastNotification.ps1..." -ForegroundColor Magenta
-            powershell.exe -ExecutionPolicy Bypass -File $RemediateScriptPath -Config $tempConfig
+            powershell.exe -ExecutionPolicy Bypass -Command "& '$RemediateScriptPath' -Config '$tempConfig'"
             Write-Host "  [PASS] Toast displayed for '$($deployment.Name)'." -ForegroundColor Green
         }
         catch {

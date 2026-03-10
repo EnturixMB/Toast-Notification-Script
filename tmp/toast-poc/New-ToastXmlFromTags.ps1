@@ -11,20 +11,20 @@
 # Output:   [xml] object with tag values applied
 #
 # Tag-to-XML mapping:
-#   Headline      → <Text Name="HeaderText">
-#   Title         → <Text Name="TitleText">
-#   Description   → <Text Name="BodyText1">
-#   Body2         → <Text Name="BodyText2">
-#   Attribution   → <Text Name="AttributionText">
-#   HeroImage     → <Option Name="HeroImageName" Value="...">
-#   LogoImage     → <Option Name="LogoImageName" Value="...">
-#   Scenario      → <Option Name="Scenario" Type="...">
-#   ActionButton  → <Text Name="ActionButton1"> + Enabled="True"
-#   Action        → <Option Name="Action1" Value="...">
-#   ActionButton2 → <Text Name="ActionButton2"> + Enabled="True"
-#   Action2       → <Option Name="Action2" Value="...">
-#   DismissButton → <Text Name="DismissButton">
-#   Urgency       → sets HeroImageName + LogoImageName from image set
+#   Headline      -> <Text Name="HeaderText">
+#   Title         -> <Text Name="TitleText">
+#   Description   -> <Text Name="BodyText1">
+#   Body2         -> <Text Name="BodyText2">
+#   Attribution   -> <Text Name="AttributionText">
+#   HeroImage     -> <Option Name="HeroImageName" Value="...">
+#   LogoImage     -> <Option Name="LogoImageName" Value="...">
+#   Scenario      -> <Option Name="Scenario" Type="...">
+#   ActionButton  -> <Text Name="ActionButton1"> + Enabled="True"
+#   Action        -> <Option Name="Action1" Value="...">
+#   ActionButton2 -> <Text Name="ActionButton2"> + Enabled="True"
+#   Action2       -> <Option Name="Action2" Value="...">
+#   DismissButton -> <Text Name="DismissButton">
+#   Urgency       -> sets HeroImageName + LogoImageName from image set
 # =============================================================================
 function New-ToastXmlFromTags {
     param(
@@ -72,7 +72,7 @@ function New-ToastXmlFromTags {
             $logoFile = $UrgencyMap[$urgencyValue].Logo
         }
         else {
-            Write-Warning "Unknown Urgency value '$($Tags['Urgency'])' — falling back to 'info'"
+            Write-Warning "Unknown Urgency value '$($Tags['Urgency'])' - falling back to 'info'"
             $heroFile = $UrgencyMap['info'].Hero
             $logoFile = $UrgencyMap['info'].Logo
         }
