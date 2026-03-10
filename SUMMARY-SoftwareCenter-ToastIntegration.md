@@ -70,7 +70,7 @@ When an administrator types tags into the description field in the SCCM console,
 > **Adopted Mitigations:**
 >
 > - **Structured delimited block with `ConvertFrom-StringData`.** Instead of regex-scanning the entire description, require the toast config to live inside a clearly fenced block (e.g., between `[TOAST-BEGIN]` and `[TOAST-END]` markers). Within this block, use PowerShell's built-in `ConvertFrom-StringData` to parse simple `Key=Value` lines — no regex needed. This completely eliminates false matches from regular description text and handles special characters natively.
-> - **Single-pass block detection.** The parser simply scans for the `[TOAST-BEGIN]` marker. Everything outside the markers is plain text and is ignored entirely. No `#toast` anchor or two-pass approach is needed — the fenced block alone is the trigger.
+> - **Single-pass block detection.** The parser simply scans for the `[TOAST-BEGIN]` marker. Everything outside the `[TOAST-BEGIN]` and `[TOAST-END]` markers is plain text and is ignored entirely. No `#toast` anchor or two-pass approach is needed — the fenced block alone is the trigger.
 
 ### 6. ~~Logon-Only Trigger~~ — Addressed
 
@@ -109,7 +109,7 @@ Image URLs (`HeroImage`, `LogoImage`) embedded in the description field are fetc
 
 | Aspect | Verdict |
 |--------|---------|
-| **Best suited for** | MECM-managed, German-language environments that want quick, per-deployment toast notifications without maintaining separate XML configuration infrastructure |
+| **Best suited for** | MECM-managed, single-language (German) environments that want quick, per-deployment toast notifications without maintaining separate XML configuration infrastructure |
 | **Not suited for** | Intune-only environments or scenarios requiring real-time notification delivery without logon/unlock triggers |
 | **Biggest strength** | Radical simplification — a two-line `[TOAST-BEGIN]` block is all it takes; auto-suppress on install handles lifecycle automatically |
 | **Biggest risk** | Description field pollution — addressed by the adopted mitigations (structured delimited block, ConvertFrom-StringData) |

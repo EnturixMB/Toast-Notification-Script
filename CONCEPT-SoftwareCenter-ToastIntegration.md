@@ -419,7 +419,7 @@ The solution is deployed as a **Scheduled Task** to all clients with **two trigg
 | **Conditions** | Run only when user is logged on |
 | **Settings** | Allow task to be run on demand; stop if running longer than 5 minutes |
 
-> **Note:** The workstation unlock trigger ensures users see pending notifications even after returning from a break or locking their PC. Combined with auto-suppress on install, this means: if the user installs the software and then locks/unlocks, no toast will appear. The unlock trigger uses Windows Security Event ID `4801` (workstation unlocked). Alternatively, a `SessionUnlock` trigger can be configured via the `SessionStateChangeTrigger` in Task Scheduler (SessionType `7` = SessionUnlock).
+> **Note:** The workstation unlock trigger ensures users see pending notifications even after returning from a break or locking their PC. Combined with auto-suppress on install, this means: if the user installs the software and then locks/unlocks, no toast will appear. The unlock trigger uses Windows Security Event ID `4801` (workstation unlocked). Alternatively, a `SessionUnlock` trigger can be configured via the Task Scheduler `SessionStateChangeTrigger`.
 
 #### Files deployed to each client:
 
@@ -464,7 +464,7 @@ Key Properties:
 Before parsing the description, check whether the software is already installed:
 
 1. Read `InstallState` (for `CCM_Application`) or `ResolvedState` (for `CCM_Program`)
-2. If the state indicates **installed** (e.g., `InstallState = "Installed"`) → **skip this deployment entirely**
+2. If the state indicates **installed** (e.g., `InstallState = "Installed"` for Applications, or the equivalent resolved state for Programs) → **skip this deployment entirely**
 3. Log: `INFO: Deployment '7-Zip 24.09' already installed — toast suppressed.`
 4. If **not installed** → proceed to Step 3
 
@@ -654,7 +654,7 @@ The workstation unlock trigger is the fastest way to iterate during POC testing:
 
 ### 6. Use a Tracking-Free Test Mode
 
-For rapid POC testing, consider a `--test` flag on the orchestrator script that skips duplicate prevention and always shows the toast, regardless of whether it was shown before.
+For rapid POC testing, consider a `-TestMode` switch on the orchestrator script that skips duplicate prevention and always shows the toast, regardless of whether it was shown before.
 
 ### 7. Validate Auto-Suppress Manually
 
