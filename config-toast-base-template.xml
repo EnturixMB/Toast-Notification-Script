@@ -19,18 +19,18 @@
 	<Option Name="Action2" Value="" />	<!-- Action taken when using the Action button. Can be any protocol in Windows -->
 	<Text Option="MultiLanguageSupport" Enabled="False" /> <!-- Enable support for multiple languages. If set to True, the toast notification will look for the users language culture within the config file -->
 	<en-US> <!-- Default fallback language. German (de-DE) text is used here intentionally because MultiLanguageSupport is set to False, so the script always reads from the en-US block -->
-        <Text Name="PendingRebootUptimeText">Ihr Computer muss neu gestartet werden, da die maximale Betriebszeit überschritten wurde.</Text> <!-- Text used if the PendingRebootUptimeText Option is enabled -->
-        <Text Name="WeeklyMessageTitle">Wöchentliche Erinnerung</Text> <!-- Title text for weekly message notifications -->
-        <Text Name="WeeklyMessageBody">Die IT-Abteilung hat neue Anwendungen im Software Center veröffentlicht. Schauen Sie sich diese an.&#10;&#10;Klicken Sie auf 'Software Center öffnen', um das Software Center zu starten.</Text> <!-- Body text for weekly message notifications -->
+        <Text Name="PendingRebootUptimeText"></Text> <!-- Text used if the PendingRebootUptimeText Option is enabled -->
+        <Text Name="WeeklyMessageTitle"></Text> <!-- Title text for weekly message notifications -->
+        <Text Name="WeeklyMessageBody"></Text> <!-- Body text for weekly message notifications -->
         <Text Name="ActionButton1">Software Center öffnen</Text>  <!-- Text on the ActionButton if enabled -->
-		<Text Name="ActionButton2">Mehr erfahren</Text>  <!-- Text on the ActionButton if enabled -->
+		<Text Name="ActionButton2"></Text>  <!-- Text on the ActionButton if enabled -->
         <Text Name="DismissButton">Schließen</Text> <!-- Text on the DismissButton if enabled -->
-        <Text Name="SnoozeButton">Erinnern</Text> <!-- Text on the SnoozeButton if enabled -->
-        <Text Name="AttributionText">IT-Abteilung</Text>
-        <Text Name="HeaderText">IT-Abteilung</Text>
-        <Text Name="TitleText">Wichtige IT-Benachrichtigung</Text>
-        <Text Name="BodyText1">Die IT-Abteilung möchte Sie auf eine wichtige Benachrichtigung aufmerksam machen.</Text>
-        <Text Name="BodyText2">Bitte prüfen Sie das Software Center auf verfügbare Updates und Anwendungen. Vielen Dank.</Text>
+        <Text Name="SnoozeButton">Später erinnern</Text> <!-- Text on the SnoozeButton if enabled -->
+        <Text Name="AttributionText"></Text>
+        <Text Name="HeaderText"></Text>
+        <Text Name="TitleText"></Text>
+        <Text Name="BodyText1"></Text>
+        <Text Name="BodyText2"></Text>
         <Text Name="SnoozeText">Klicken Sie auf Erinnern, um erneut erinnert zu werden:</Text>
         <Text Name="GreetMorningText">Guten Morgen</Text>
         <Text Name="GreetAfternoonText">Guten Tag</Text>
@@ -41,50 +41,4 @@
         <Text Name="ComputerUptimeText">Computer-Laufzeit:</Text>
         <Text Name="ComputerUptimeDaysText">Tage</Text>
     </en-US>
-	<da-DK>
-        <Text Name="PendingRebootUptimeText">Din computer er påkrævet at genstarte, da den har overskredet den maksimale oppetid.</Text> <!-- Text used if the PendingRebootUptimeText Option is enabled -->
-        <Text Name="WeeklyMessageTitle">Weekend Påmindelse</Text> <!-- Title text for weekly message notifications -->
-        <Text Name="WeeklyMessageBody">Det er fredag eftermiddag - Overvej at genstarte din computer i weekenden</Text> <!-- Body text for weekly message notifications -->
-        <Text Name="ActionButton1">Åbn Software Center</Text>  <!-- Text on the ActionButton if enabled -->
-		<Text Name="ActionButton2">Mere Info</Text>  <!-- Text on the ActionButton if enabled -->
-        <Text Name="DismissButton">Afvis</Text> <!-- Text on the DismissButton if enabled -->
-        <Text Name="SnoozeButton">Udskyd</Text> <!-- Text on the SnoozeButton if enabled -->
-        <Text Name="AttributionText">IT-Afdelingen</Text>
-        <Text Name="HeaderText">IT-Afdelingen</Text>
-        <Text Name="TitleText">Vigtig IT-meddelelse</Text>
-        <Text Name="BodyText1">IT-afdelingen ønsker at gøre dig opmærksom på en vigtig meddelelse.</Text>
-        <Text Name="BodyText2">Tjek venligst Software Center for tilgængelige opdateringer og applikationer. På forhånd tak.</Text>
-        <Text Name="SnoozeText">Klik udskyd for at blive påmindet igen om:</Text>
-        <Text Name="GreetMorningText">Godmorgen</Text>
-        <Text Name="GreetAfternoonText">God eftermiddag</Text>
-        <Text Name="GreetEveningText">Godaften</Text>
-        <Text Name="MinutesText">Minutter</Text>
-        <Text Name="HourText">Time</Text>
-        <Text Name="HoursText">Timer</Text>
-        <Text Name="ComputerUptimeText">Computer oppetid:</Text>
-        <Text Name="ComputerUptimeDaysText">dage</Text>
-    </da-DK>
-    <sv-SE>
-		<Text Name="PendingRebootUptimeText">Din dator behöver startas om då den överskridit den maximala tillåtna upptiden.</Text>	<!-- Text used if the PendingRebootUptimeText Option is enabled -->
-		<Text Name="WeeklyMessageTitle">Helgpåminnelse</Text> <!-- Title text for weekly message notifications -->
-		<Text Name="WeeklyMessageBody">Det är fredag eftermiddag - Överväg att starta om din dator under helgen</Text> <!-- Body text for weekly message notifications -->
-		<Text Name="ActionButton1">Öppna Software Center</Text>	<!-- Text on the ActionButton if enabled -->
-		<Text Name="ActionButton2">Läs Mer</Text>	<!-- Text on the ActionButton if enabled -->
-		<Text Name="DismissButton">Stäng</Text>	<!-- Text on the DismissButton if enabled -->
-		<Text Name="SnoozeButton">Påminn</Text>	<!-- Text on the SnoozeButton if enabled -->
-		<Text Name="AttributionText">IT-avdelningen</Text>
-		<Text Name="HeaderText">IT-avdelningen</Text>
-		<Text Name="TitleText">Viktigt IT-meddelande</Text>
-		<Text Name="BodyText1">IT-avdelningen vill uppmärksamma dig på ett viktigt meddelande.</Text>
-		<Text Name="BodyText2">Kontrollera Software Center för tillgängliga uppdateringar och applikationer. Tack på förhand!</Text>
-		<Text Name="SnoozeText">Klicka på Påminn för att bli påmind igen:</Text>
-		<Text Name="GreetMorningText">God morgon</Text>
-		<Text Name="GreetAfternoonText">God eftermiddag</Text>
-		<Text Name="GreetEveningText">God kväll</Text>
-		<Text Name="MinutesText">Minuter</Text>
-		<Text Name="HourText">Timma</Text>
-		<Text Name="HoursText">Timmar</Text>
-		<Text Name="ComputerUptimeText">Datorns upptid:</Text>
-		<Text Name="ComputerUptimeDaysText">dagar</Text>
-    </sv-SE>
 </Configuration>

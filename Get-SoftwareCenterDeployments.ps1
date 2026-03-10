@@ -29,7 +29,7 @@ function Get-SoftwareCenterDeployments {
         $null = Get-CimInstance -Namespace $Namespace -ClassName 'CCM_Application' -ErrorAction Stop
     }
     catch {
-        Write-Log -Level Warn -Message "SCCM client WMI namespace '$Namespace' is not available. Error: $($_.Exception.Message)"
+        Write-Warning "SCCM client WMI namespace '$Namespace' is not available. Error: $($_.Exception.Message)"
         return $null
     }
 
@@ -53,7 +53,7 @@ function Get-SoftwareCenterDeployments {
         }
     }
     catch {
-        Write-Log -Level Warn -Message "Failed to query CCM_Application: $($_.Exception.Message)"
+        Write-Warning "Failed to query CCM_Application: $($_.Exception.Message)"
     }
 
     # ------------------------------------------------------------------
@@ -76,7 +76,7 @@ function Get-SoftwareCenterDeployments {
         }
     }
     catch {
-        Write-Log -Level Warn -Message "Failed to query CCM_Program: $($_.Exception.Message)"
+        Write-Warning "Failed to query CCM_Program: $($_.Exception.Message)"
     }
 
     # ------------------------------------------------------------------
@@ -87,7 +87,7 @@ function Get-SoftwareCenterDeployments {
     $available = [System.Collections.Generic.List[PSCustomObject]]::new()
     foreach ($dep in $allDeployments) {
         if ($dep.IsInstalled) {
-            Write-Log -Level Info -Message "Deployment '$($dep.Name)' already installed — toast suppressed."
+            Write-Warning "Deployment '$($dep.Name)' already installed — toast suppressed."
         }
         else {
             $available.Add($dep)

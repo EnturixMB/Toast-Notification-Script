@@ -79,7 +79,7 @@ Write-Output " Date:      $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Write-Output " User:      $env:USERNAME"
 
 try {
-    $null = Get-WmiObject -Namespace $WmiNamespace -Class "__NAMESPACE" -ErrorAction Stop
+    $null = Get-CimClass -Namespace $WmiNamespace -ErrorAction Stop
     Write-Output " Status:    SCCM client namespace found"
 }
 catch {
@@ -102,14 +102,14 @@ foreach ($className in $WmiClasses) {
     Write-SubHeader "Available Properties (Schema)"
 
     try {
-        $classObj = Get-WmiObject -Namespace $WmiNamespace -Class $className -List -ErrorAction Stop
+        $classObj = Get-CimClass -Namespace $WmiNamespace -ClassName $className -ErrorAction Stop
 
         if ($null -eq $classObj) {
             Write-Warning "Class '$className' not found in namespace '$WmiNamespace'."
             continue
         }
 
-        $properties = $classObj.Properties | Sort-Object Name
+        $properties = $classObj.CimClassProperties | Sort-Object Name
         $propertyCount = ($properties | Measure-Object).Count
 
         Write-Output " Total properties: $propertyCount"
@@ -118,8 +118,8 @@ foreach ($className in $WmiClasses) {
         Write-Output (" {0,-40} {1,-20} {2}" -f ("-" * 40), ("-" * 20), ("-" * 8))
 
         foreach ($prop in $properties) {
-            $isArray = if ($prop.IsArray) { "Yes" } else { "No" }
-            Write-Output (" {0,-40} {1,-20} {2}" -f $prop.Name, $prop.Type, $isArray)
+            $isArray = if ($prop.CimType.ToString() -like '*Array') { "Yes" } else { "No" }
+            Write-Output (" {0,-40} {1,-20} {2}" -f $prop.Name, $prop.CimType, $isArray)
         }
     }
     catch {
@@ -133,7 +133,7 @@ foreach ($className in $WmiClasses) {
     Write-SubHeader "Available Deployments ($className)"
 
     try {
-        $instances = Get-WmiObject -Namespace $WmiNamespace -Class $className -ErrorAction Stop
+        $instances = Get-CimInstance -Namespace $WmiNamespace -ClassName $className -ErrorAction Stop
 
         if ($null -eq $instances) {
             Write-Output " No deployments found for $className."
