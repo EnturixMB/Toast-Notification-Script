@@ -22,10 +22,10 @@ A single scheduled task deployed once to all clients handles everything. There i
 The concept builds on top of the existing `Remediate-ToastNotification.ps1` without requiring changes to the core toast display script. This minimizes development effort and risk.
 
 ### 6. Flexible Configuration Depth
-Admins can use a minimal `#toast` tag for default behavior or fully customize the notification with headline, title, description, buttons, images, scheduling, and scenario tags. The fallback to a base template means partial configuration is always valid.
+Admins can use a minimal two-line `[TOAST-BEGIN]` block for default behavior or fully customize the notification with headline, title, description, buttons, images, urgency, and scheduling tags. The fallback to built-in defaults (German buttons, urgency-based images) means partial configuration is always valid.
 
 ### 7. Built-In Scheduling
-The `#Deadline` and `#StartDate` tags allow time-windowed toast display, so notifications automatically stop appearing after a deadline without any manual cleanup.
+The `Deadline` and `StartDate` tags allow time-windowed toast display, so notifications automatically stop appearing after a deadline without any manual cleanup. Additionally, auto-suppress on install ensures toasts disappear once the software is installed, even without explicit scheduling.
 
 ### 8. Duplicate Prevention
 Hash-based tracking prevents the same toast from being shown on every logon, while still re-showing toasts when the description content changes.
@@ -43,7 +43,7 @@ New tags (e.g., `#SnoozeButton`, `#Priority`, `#RepeatDays`, `#Language`) can be
 > **Note:** This downside is **not applicable** to our environment. We exclusively use MECM, so the dependency on the Configuration Manager client agent is a given, not a limitation.
 
 ### 2. Description Field Misuse
-The description field is designed for human-readable text visible to end users in Software Center. Embedding `#toast` configuration tags pollutes this field with technical markup that end users will see if they browse Software Center, creating a confusing experience.
+The description field is designed for human-readable text visible to end users in Software Center. Embedding `[TOAST-BEGIN]`…`[TOAST-END]` configuration blocks pollutes this field with technical markup that end users will see if they browse Software Center, creating a confusing experience.
 
 > **Adopted Mitigation:**
 >
@@ -64,18 +64,19 @@ When an administrator types tags into the description field in the SCCM console,
 >
 > - **Log-level feedback on the client.** When the client-side script encounters an unrecognized tag, log it prominently as a warning (e.g., `WARNING: Unknown tag 'Headlne' — did you mean 'Headline'?`). A fuzzy-match suggestion in the log accelerates troubleshooting. Admins can review the centralized logs or run the script in test mode on a single machine to validate.
 
-### 5. Fragile Regex-Based Parsing
-Relying on regex to parse free-text description fields is inherently fragile. Edge cases such as special characters, multi-line values, `#` symbols in regular description text, or localized characters could cause incorrect parsing or false matches.
+### 5. ~~Fragile Regex-Based Parsing~~ — Addressed
+~~Relying on regex to parse free-text description fields is inherently fragile. Edge cases such as special characters, multi-line values, `#` symbols in regular description text, or localized characters could cause incorrect parsing or false matches.~~
 
 > **Adopted Mitigations:**
 >
 > - **Structured delimited block with `ConvertFrom-StringData`.** Instead of regex-scanning the entire description, require the toast config to live inside a clearly fenced block (e.g., between `[TOAST-BEGIN]` and `[TOAST-END]` markers). Within this block, use PowerShell's built-in `ConvertFrom-StringData` to parse simple `Key=Value` lines — no regex needed. This completely eliminates false matches from regular description text and handles special characters natively.
-> - **Two-pass parsing with anchor tag.** Only begin parsing after the `#toast` anchor is found. Treat everything before `#toast` as plain text and ignore it entirely. This scopes the parsing to a small, predictable block of text rather than the full free-form description, dramatically reducing false-match surface area.
+> - **Single-pass block detection.** The parser simply scans for the `[TOAST-BEGIN]` marker. Everything outside the `[TOAST-BEGIN]` and `[TOAST-END]` markers is plain text and is ignored entirely. No `#toast` anchor or two-pass approach is needed — the fenced block alone is the trigger.
 
-### 6. Logon-Only Trigger
-The scheduled task runs only at user logon. If a new deployment with `#toast` is published mid-session, the user will not see the toast until their next logon. There is no real-time or periodic refresh mechanism.
+### 6. ~~Logon-Only Trigger~~ — Addressed
 
-> **Note:** No mitigation adopted. This is accepted as a known limitation for the initial implementation.
+~~The scheduled task runs only at user logon. If a new deployment with a toast block is published mid-session, the user will not see the toast until their next logon. There is no real-time or periodic refresh mechanism.~~
+
+> **Addressed:** The scheduled task now has **two triggers**: user logon and workstation unlock (Event ID `4801` / `SessionUnlock`). This means users see pending notifications after returning from a break or locking their PC, significantly reducing the window where a new deployment goes unnoticed.
 
 ### 7. ~~Limited Multi-Language Support~~ — Not Applicable
 ~~Each deployment description can only contain one set of text tags. Unlike the existing XML config format which supports multiple language blocks (e.g., `<en-US>`, `<da-DK>`), the hashtag approach provides no built-in way to deliver localized toast text to users with different OS languages.~~
@@ -83,7 +84,7 @@ The scheduled task runs only at user logon. If a new deployment with `#toast` is
 > **Note:** This downside is **not applicable** to our environment. We operate with a single language, so multi-language toast support is not needed.
 
 ### 8. Toast Overload Risk
-If many deployments carry `#toast` tags, users may be overwhelmed with notifications at logon. The concept proposes a maximum of 3 toasts per logon, but this is a workaround rather than a solution — remaining toasts are silently dropped, and there is no queuing mechanism.
+If many deployments carry `[TOAST-BEGIN]` blocks, users may be overwhelmed with notifications at logon or unlock. The concept proposes a maximum of 3 toasts per trigger event, but this is a workaround rather than a solution — remaining toasts are silently dropped, and there is no queuing mechanism. However, auto-suppress on install naturally reduces the number of active toasts over time.
 
 > **Note:** No mitigation adopted. The existing 3-toast-per-logon cap is accepted for the initial implementation.
 
@@ -108,20 +109,20 @@ Image URLs (`HeroImage`, `LogoImage`) embedded in the description field are fetc
 
 | Aspect | Verdict |
 |--------|---------|
-| **Best suited for** | MECM-managed, single-language environments that want quick, per-deployment toast notifications without maintaining separate XML configuration infrastructure |
-| **Not suited for** | Intune-only environments or scenarios requiring real-time (non-logon) notification delivery without additional triggers |
-| **Biggest strength** | Radical simplification — one `#toast` tag in a deployment description is all it takes |
-| **Biggest risk** | Description field pollution and parsing fragility — both addressed by the adopted mitigations (structured delimited block, two-pass parsing, ConvertFrom-StringData) |
+| **Best suited for** | MECM-managed, single-language (German) environments that want quick, per-deployment toast notifications without maintaining separate XML configuration infrastructure |
+| **Not suited for** | Intune-only environments or scenarios requiring real-time notification delivery without logon/unlock triggers |
+| **Biggest strength** | Radical simplification — a two-line `[TOAST-BEGIN]` block is all it takes; auto-suppress on install handles lifecycle automatically |
+| **Biggest risk** | Description field pollution — addressed by the adopted mitigations (structured delimited block, ConvertFrom-StringData) |
 
-The concept is a creative and pragmatic approach for our MECM-centric environment. With the six adopted mitigations — structured `[TOAST-BEGIN]`…`[TOAST-END]` block parsing (eliminating regex fragility), two-pass anchor-based parsing (reducing false-match surface area), short-form aliases and aggressive defaults (solving character limits), pre-staged images (eliminating external URL dependencies), and fuzzy-match logging (compensating for the lack of authoring-time validation) — the remaining trade-offs become manageable. The two originally identified showstoppers (SCCM dependency and multi-language support) are not applicable in our single-language, MECM-only environment.
+The concept is a creative and pragmatic approach for our MECM-centric environment. With the adopted mitigations — structured `[TOAST-BEGIN]`…`[TOAST-END]` block parsing (eliminating regex fragility), short-form aliases and aggressive defaults (solving character limits), 3 urgency-based pre-staged image sets (eliminating external URL dependencies), auto-suppress on install (eliminating stale notifications), and fuzzy-match logging (compensating for the lack of authoring-time validation) — the remaining trade-offs become manageable. The two originally identified showstoppers (SCCM dependency and multi-language support) are not applicable in our German-language, MECM-only environment. The addition of a workstation unlock trigger alongside the logon trigger significantly improves notification visibility without requiring real-time polling.
 
 ### Adopted Mitigations Summary
 
 | # | Mitigation | Addresses Downside |
 |---|------------|-------------------|
-| 1 | Clearly delimited block (`[TOAST-BEGIN]`…`[TOAST-END]`) at the bottom | Description field misuse (#2) |
-| 2 | Short-form tag aliases (`h=`, `t=`, `d=`, etc.) | Character length constraints (#3) |
-| 3 | Lean on defaults aggressively; pre-stage Logo & Hero images on client | Character length constraints (#3), Security (#11) |
-| 4 | Log-level feedback with fuzzy-match suggestions | No authoring-time validation (#4) |
-| 5 | Structured delimited block with `ConvertFrom-StringData` | Fragile regex-based parsing (#5) |
-| 6 | Two-pass parsing with `#toast` anchor tag | Fragile regex-based parsing (#5) |
+| 1 | Clearly delimited block (`[TOAST-BEGIN]`…`[TOAST-END]`) | Description field misuse (#2) |
+| 2 | Short-form tag aliases (`h=`, `t=`, `d=`, `u=`, etc.) | Character length constraints (#3) |
+| 3 | Lean on defaults aggressively; 3 urgency-based pre-staged image sets on client | Character length constraints (#3), Security (#11) |
+| 4 | Auto-suppress on successful installation (WMI `InstallState` check) | Stale notifications, manual cleanup |
+| 5 | Log-level feedback with fuzzy-match suggestions | No authoring-time validation (#4) |
+| 6 | Structured delimited block with `ConvertFrom-StringData` | Fragile regex-based parsing (#5) |

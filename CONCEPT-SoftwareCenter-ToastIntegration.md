@@ -2,7 +2,16 @@
 
 ## Overview
 
-This concept describes how to extend the Toast Notification Script so that toast notifications can be **configured directly from the Description field** of Software Center deployments (SCCM/MEMCM). Instead of managing separate XML config files, administrators embed hashtag-based configuration tags into the deployment description text. A lightweight PowerShell script, deployed as a **Scheduled Task triggered at user logon**, queries all available Software Center deployments, parses their descriptions for configuration tags, and triggers toast notifications accordingly.
+This concept describes how to extend the Toast Notification Script so that toast notifications can be **configured directly from the Description field** of Software Center deployments (SCCM/MEMCM). Instead of managing separate XML config files, administrators embed a structured `[TOAST-BEGIN]`…`[TOAST-END]` block into the deployment description text. A lightweight PowerShell script, deployed as a **Scheduled Task triggered at user logon**, queries all available Software Center deployments, parses their descriptions for the toast block, and triggers toast notifications accordingly.
+
+### Core Principles
+
+- **No `#toast` anchor needed** — Only the `[TOAST-BEGIN]`…`[TOAST-END]` block matters. If the block is present, a toast is triggered.
+- **Default buttons always present** — Every toast automatically includes "Software Center öffnen" and "Schließen" as default buttons, without needing to specify them.
+- **3 urgency-based default image sets** — Three image sets (Info, Warnung, Kritisch) are pre-staged locally on the client. Selected via the `Urgency` tag.
+- **Minimal configuration** — All parameters are unset by default. Only explicitly specified parameters in the `[TOAST-BEGIN]` block override defaults.
+- **Auto-suppress on install** — Once the software has been successfully installed, the toast notification is automatically suppressed.
+- **German toast content** — All default text shown to end users (button labels, greeting, attribution) is in German.
 
 ---
 
@@ -12,6 +21,7 @@ This concept describes how to extend the Toast Notification Script so that toast
 - **No separate config hosting**: Eliminates the need to host XML files on web servers or file shares.
 - **Per-deployment granularity**: Each Software Center deployment can carry its own toast configuration, so different applications or updates get different notifications.
 - **Simple rollout**: A single scheduled task deployed once to all clients handles everything.
+- **Auto-suppress on install**: Once the software is successfully installed, the notification is automatically suppressed — no manual cleanup needed.
 
 ---
 
@@ -23,15 +33,11 @@ This concept describes how to extend the Toast Notification Script so that toast
 │                                                             │
 │  Deployment: "7-Zip 24.09"                                  │
 │  Description:                                               │
-│    This deployment installs 7-Zip 24.09 for all users.      │
+│    Dieses Deployment installiert 7-Zip 24.09.               │
 │                                                             │
-│    #toast                                                   │
 │    [TOAST-BEGIN]                                             │
-│    t=New Software Available                                 │
-│    d=7-Zip 24.09 is now available. Please install it.       │
-│    dl=2026-03-15                                            │
-│    ab=Open Software Center                                  │
-│    a=softwarecenter:Page=Applications                       │
+│    t=Neue Software verfügbar                                │
+│    d=7-Zip 24.09 steht bereit. Bitte installieren.          │
 │    [TOAST-END]                                              │
 │                                                             │
 └────────────────────────────┬────────────────────────────────┘
@@ -57,32 +63,39 @@ This concept describes how to extend the Toast Notification Script so that toast
 │               │                                              │
 │               ▼                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  Step 2: Two-pass parsing — Pass 1: Anchor detection   │  │
-│  │  → Scan for #toast anchor (case-insensitive)           │  │
-│  │  → If absent → skip deployment                         │  │
-│  │  → Everything before #toast is ignored                 │  │
+│  │  Step 2: Check Installation State                      │  │
+│  │  → Query InstallState / ResolvedState via WMI          │  │
+│  │  → If already installed → suppress toast, skip         │  │
 │  └────────────┬───────────────────────────────────────────┘  │
 │               │                                              │
 │               ▼                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  Step 3: Two-pass parsing — Pass 2: Structured block   │  │
-│  │  → Extract [TOAST-BEGIN]…[TOAST-END] block              │  │
-│  │  → Parse Key=Value lines via ConvertFrom-StringData    │  │
+│  │  Step 3: Detect [TOAST-BEGIN]…[TOAST-END] block        │  │
+│  │  → Scan description for [TOAST-BEGIN] marker           │  │
+│  │  → If not found → skip deployment (no toast)           │  │
+│  │  → Extract block between markers                       │  │
+│  └────────────┬───────────────────────────────────────────┘  │
+│               │                                              │
+│               ▼                                              │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │  Step 4: Parse Key=Value pairs                         │  │
+│  │  → ConvertFrom-StringData (no regex needed)            │  │
 │  │  → Resolve short-form aliases (h→Headline, t→Title…)   │  │
 │  │  → Log warnings for unrecognized keys (fuzzy-match)    │  │
 │  └────────────┬───────────────────────────────────────────┘  │
 │               │                                              │
 │               ▼                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  Step 4: Generate in-memory XML configuration          │  │
+│  │  Step 5: Generate in-memory XML configuration          │  │
 │  │  → Build <Configuration> XML matching existing format  │  │
 │  │  → Merge with base/default template                    │  │
-│  │  → Images default to pre-staged local files            │  │
+│  │  → Select images based on Urgency level                │  │
+│  │  → Default buttons: Software Center öffnen + Schließen │  │
 │  └────────────┬───────────────────────────────────────────┘  │
 │               │                                              │
 │               ▼                                              │
 │  ┌────────────────────────────────────────────────────────┐  │
-│  │  Step 5: Invoke Remediate-ToastNotification.ps1        │  │
+│  │  Step 6: Invoke Remediate-ToastNotification.ps1        │  │
 │  │  → Pass generated XML config                           │  │
 │  │  → Display toast notification to user                  │  │
 │  └────────────────────────────────────────────────────────┘  │
@@ -98,42 +111,72 @@ Toast configuration is embedded in the **Description** field of a Software Cente
 
 ### Delimited Block Convention
 
-The toast configuration **must** be placed inside a fenced block marked by `[TOAST-BEGIN]` and `[TOAST-END]` markers at the bottom of the description field. Everything above `[TOAST-BEGIN]` is treated as regular description text and is never parsed. Within the block, each line is a simple `Key=Value` pair parsed with PowerShell's built-in `ConvertFrom-StringData` — no regex needed.
+The toast configuration **must** be placed inside a fenced block marked by `[TOAST-BEGIN]` and `[TOAST-END]` markers in the description field. Everything outside the markers is treated as regular description text and is never parsed. Within the block, each line is a simple `Key=Value` pair parsed with PowerShell's built-in `ConvertFrom-StringData` — no regex needed.
+
+**No `#toast` anchor is needed.** The presence of `[TOAST-BEGIN]` alone is sufficient to trigger toast processing.
 
 ```
-Human-readable description text here.
-This part is shown to end users in Software Center.
+Beschreibungstext für Endbenutzer.
+Dieser Teil wird im Software Center angezeigt.
 
 [TOAST-BEGIN]
-toast=true
-Title=New Software Available
-Description=Please install the latest update.
+t=Neue Software verfügbar
+d=Bitte installieren Sie das neueste Update.
 [TOAST-END]
 ```
 
-> **Note:** The `#toast` anchor tag still serves as the primary trigger. The parser performs a **two-pass approach**: first, it scans for `#toast` anywhere in the description to decide whether to process the deployment at all. Only after finding `#toast` does it look for the `[TOAST-BEGIN]`…`[TOAST-END]` block and parse the structured `Key=Value` lines within it. Everything before `#toast` is plain text and is ignored entirely, dramatically reducing false-match surface area.
-
 ### Lean on Defaults
 
-The base template already provides sensible defaults for all configuration values. Administrators should specify **only the tags that differ** from the template. In practice, most toasts need only `toast`, `Title`, and `Description` — well within any character limit.
+All parameters are **unset by default** except for the following built-in defaults that are always present:
 
-**Logo and Hero images are pre-staged on the client** at deployment time (stored under `C:\ProgramData\ToastNotification\`). There is no need to specify `HeroImage` or `LogoImage` URLs unless a deployment-specific image is required. This eliminates external URL dependencies for the common case.
+| Default | Value | Notes |
+|---------|-------|-------|
+| **ActionButton1** | `Software Center öffnen` | Opens Software Center Applications page |
+| **Action1** | `softwarecenter:Page=Applications` | Protocol link |
+| **DismissButton** | `Schließen` | Dismiss the notification |
+| **Urgency** | `info` | Selects the Info image set (blue/green) |
+| **Images** | Local pre-staged files based on urgency | See [Urgency-Based Default Images](#urgency-based-default-images) |
 
-### Trigger Tag (Required)
+Administrators should specify **only the tags that differ** from these defaults. In practice, most toasts need only `Title` and `Description` — well within any character limit.
 
-| Tag | Short Alias | Purpose | Example |
-|-----|-------------|---------|---------|
-| `#toast` | — | **Activates** toast processing for this deployment. Without this tag, the deployment is ignored. Must appear somewhere in the description (can be above or inside the `[TOAST-BEGIN]` block). | `#toast` |
+### Auto-Suppress on Successful Installation
+
+Before displaying a toast, the script checks the **installation state** of the associated deployment via WMI (`InstallState` / `ResolvedState` from `CCM_Application` or `CCM_Program`). If the software is already marked as **installed**, the toast is automatically suppressed. This means:
+
+- No notification is shown for software the user has already installed
+- No manual cleanup or deadline management is needed for completed deployments
+- The `[TOAST-BEGIN]` block can remain in the description permanently — it only produces toasts while the software is not yet installed
+
+### Urgency-Based Default Images
+
+Three sets of default images are pre-staged locally on every client under `C:\ProgramData\ToastNotification\Images\`. Each set contains a Hero image and a Logo image, styled for a different urgency level:
+
+| Urgency Level | Tag Value | Hero Image | Logo Image | Visual Style |
+|---------------|-----------|------------|------------|--------------|
+| **Info** (default) | `info` | `hero-info.png` | `logo-info.png` | Blue/green, neutral — for general announcements |
+| **Warning** | `warnung` | `hero-warnung.png` | `logo-warnung.png` | Yellow/orange — for important updates |
+| **Critical** | `kritisch` | `hero-kritisch.png` | `logo-kritisch.png` | Red — for urgent/security-critical updates |
+
+The urgency level is selected via the `Urgency` tag (alias `u`). If not specified, `info` is used as the default.
+
+Example:
+```
+[TOAST-BEGIN]
+t=Kritisches Sicherheitsupdate
+d=Ein kritisches Sicherheitsupdate steht bereit. Bitte sofort installieren.
+u=kritisch
+[TOAST-END]
+```
 
 ### Content Tags (Optional — override defaults)
 
 | Tag | Short Alias | Maps to XML Field | Purpose | Example |
 |-----|-------------|-------------------|---------|---------|
-| `Headline=<text>` | `h=<text>` | `HeaderText` | The small header line at the top of the toast | `Headline=IT Department Notice` |
-| `Title=<text>` | `t=<text>` | `TitleText` | The bold title text of the toast notification | `Title=New Software Available` |
-| `Description=<text>` | `d=<text>` | `BodyText1` | The primary body text of the toast | `Description=7-Zip 24.09 is ready to install.` |
-| `Body2=<text>` | `b2=<text>` | `BodyText2` | The secondary body text (additional detail) | `Body2=Please install at your earliest convenience.` |
-| `Attribution=<text>` | `at=<text>` | `AttributionText` | Small text at the bottom of the toast | `Attribution=IT Helpdesk` |
+| `Headline=<text>` | `h=<text>` | `HeaderText` | The small header line at the top of the toast | `Headline=IT-Abteilung` |
+| `Title=<text>` | `t=<text>` | `TitleText` | The bold title text of the toast notification | `Title=Neue Software verfügbar` |
+| `Description=<text>` | `d=<text>` | `BodyText1` | The primary body text of the toast | `Description=7-Zip 24.09 steht zur Installation bereit.` |
+| `Body2=<text>` | `b2=<text>` | `BodyText2` | The secondary body text (additional detail) | `Body2=Bitte installieren Sie die Software zeitnah.` |
+| `Attribution=<text>` | `at=<text>` | `AttributionText` | Small text at the bottom of the toast | `Attribution=IT-Helpdesk` |
 
 ### Scheduling Tags (Optional)
 
@@ -146,19 +189,22 @@ The base template already provides sensible defaults for all configuration value
 
 | Tag | Short Alias | Maps to XML Field | Purpose | Example |
 |-----|-------------|-------------------|---------|---------|
-| `HeroImage=<url>` | `hi=<url>` | `HeroImageName` | URL to the hero image shown at the top of the toast. **Not needed in most cases** — a default hero image is pre-staged on the client. | `HeroImage=https://corp.example.com/hero.png` |
-| `LogoImage=<url>` | `li=<url>` | `LogoImageName` | URL to the logo/icon image. **Not needed in most cases** — a default logo is pre-staged on the client. | `LogoImage=https://corp.example.com/logo.png` |
+| `HeroImage=<url>` | `hi=<url>` | `HeroImageName` | URL to the hero image shown at the top of the toast. **Not needed in most cases** — default images are selected by urgency level. | `HeroImage=https://corp.example.com/hero.png` |
+| `LogoImage=<url>` | `li=<url>` | `LogoImageName` | URL to the logo/icon image. **Not needed in most cases** — default images are selected by urgency level. | `LogoImage=https://corp.example.com/logo.png` |
+| `Urgency=<level>` | `u=<level>` | *(new concept)* | Selects the pre-staged image set: `info` (default), `warnung`, or `kritisch` | `Urgency=warnung` |
 | `Scenario=<type>` | `sc=<type>` | `Scenario` | Toast behavior: `reminder`, `short`, `long`, or `alarm` | `Scenario=reminder` |
 
-### Action Tags (Optional)
+### Action Tags (Optional — defaults are pre-configured)
 
-| Tag | Short Alias | Maps to XML Field | Purpose | Example |
-|-----|-------------|-------------------|---------|---------|
-| `ActionButton=<text>` | `ab=<text>` | `ActionButton1` text | Label for the primary action button | `ActionButton=Install Now` |
-| `Action=<protocol>` | `a=<protocol>` | `Action1` | Protocol/URL launched when the action button is clicked | `Action=softwarecenter:Page=Applications` |
-| `ActionButton2=<text>` | `ab2=<text>` | `ActionButton2` text | Label for a secondary action button | `ActionButton2=Learn More` |
-| `Action2=<url>` | `a2=<url>` | `Action2` | Protocol/URL for the second button | `Action2=https://wiki.corp.com/7zip` |
-| `DismissButton=<text>` | `db=<text>` | `DismissButton` text | Label for the dismiss button | `DismissButton=Later` |
+The default buttons "Software Center öffnen" and "Schließen" are **always present** without any configuration. Use these tags only to **override** the default button labels or actions.
+
+| Tag | Short Alias | Maps to XML Field | Purpose | Default | Example |
+|-----|-------------|-------------------|---------|---------|---------|
+| `ActionButton=<text>` | `ab=<text>` | `ActionButton1` text | Label for the primary action button | `Software Center öffnen` | `ActionButton=Jetzt installieren` |
+| `Action=<protocol>` | `a=<protocol>` | `Action1` | Protocol/URL launched when the action button is clicked | `softwarecenter:Page=Applications` | `Action=softwarecenter:Page=Updates` |
+| `ActionButton2=<text>` | `ab2=<text>` | `ActionButton2` text | Label for a secondary action button | *(not set)* | `ActionButton2=Mehr erfahren` |
+| `Action2=<url>` | `a2=<url>` | `Action2` | Protocol/URL for the second button | *(not set)* | `Action2=https://wiki.corp.com/7zip` |
+| `DismissButton=<text>` | `db=<text>` | `DismissButton` text | Label for the dismiss button | `Schließen` | `DismissButton=Später erinnern` |
 
 ### Short-Form Alias Mapping Table
 
@@ -175,6 +221,7 @@ To reduce character overhead by 50–70%, compact aliases can be used in place o
 | `sd` | `StartDate` |
 | `hi` | `HeroImage` |
 | `li` | `LogoImage` |
+| `u` | `Urgency` |
 | `sc` | `Scenario` |
 | `ab` | `ActionButton` |
 | `a` | `Action` |
@@ -191,7 +238,6 @@ The following table shows exactly how each parsed `Key=Value` line (from the `[T
 ```
 Key (or Short Alias)     →   XML Element / Attribute
 ─────────────────────────────────────────────────────────────
-toast (trigger)          →   <Feature Name="Toast" Enabled="True" />
 Headline (h)             →   <Text Name="HeaderText">value</Text>
 Title (t)                →   <Text Name="TitleText">value</Text>
 Description (d)          →   <Text Name="BodyText1">value</Text>
@@ -201,6 +247,7 @@ Deadline (dl)            →   (New) Used for date-range filtering logic
 StartDate (sd)           →   (New) Used for date-range filtering logic
 HeroImage (hi)           →   <Option Name="HeroImageName" Value="value" />
 LogoImage (li)           →   <Option Name="LogoImageName" Value="value" />
+Urgency (u)              →   (New) Selects pre-staged image set; maps to HeroImageName + LogoImageName
 Scenario (sc)            →   <Option Name="Scenario" Type="value" />
 ActionButton (ab)        →   <Option Name="ActionButton1" Enabled="True" />
                              <Text Name="ActionButton1">value</Text>
@@ -212,7 +259,11 @@ DismissButton (db)       →   <Option Name="DismissButton" Enabled="True" />
                              <Text Name="DismissButton">value</Text>
 ```
 
-Any keys not specified in the delimited block fall back to values from a **base template** XML (a default config bundled with the script, pre-staged on the client). Logo and Hero images default to locally pre-staged files, so most deployments do not need to specify image URLs at all.
+Any keys not specified in the delimited block fall back to the built-in defaults:
+- **ActionButton1**: `Software Center öffnen` → opens `softwarecenter:Page=Applications`
+- **DismissButton**: `Schließen`
+- **Images**: Selected by `Urgency` level (default: `info`) from locally pre-staged files
+- All other parameters remain unset unless explicitly specified
 
 ---
 
@@ -221,54 +272,48 @@ Any keys not specified in the delimited block fall back to values from a **base 
 ### What the admin types in the SCCM Console (Deployment Description field):
 
 ```
-This deployment installs 7-Zip 24.09 for all users.
-Please install it from Software Center at your earliest convenience.
+Dieses Deployment installiert 7-Zip 24.09 für alle Benutzer.
+Bitte installieren Sie es über das Software Center.
 
-#toast
 [TOAST-BEGIN]
-Headline=IT Department
-Title=New Software Available: 7-Zip 24.09
-Description=A new version of 7-Zip has been published to Software Center. Please install it at your earliest convenience.
-Body2=This update includes important security fixes.
+Headline=IT-Abteilung
+Title=Neue Software verfügbar: 7-Zip 24.09
+Description=Eine neue Version von 7-Zip wurde im Software Center veröffentlicht. Bitte installieren Sie diese zeitnah.
+Body2=Dieses Update enthält wichtige Sicherheitskorrekturen.
 Deadline=2026-03-15
-ActionButton=Open Software Center
-Action=softwarecenter:Page=Applications
-DismissButton=Remind me later
-Scenario=reminder
+Urgency=warnung
 [TOAST-END]
 ```
 
-> **Note:** The `#toast` anchor appears above the `[TOAST-BEGIN]` block. The parser first scans the entire description for `#toast` (pass 1). Only after finding it does it extract and parse the structured block between `[TOAST-BEGIN]` and `[TOAST-END]` using `ConvertFrom-StringData` (pass 2). The human-readable text at the top is never parsed.
+> **Note:** No `#toast` anchor is needed. The parser simply scans each deployment description for the `[TOAST-BEGIN]` marker. If found, it extracts and parses the structured block between `[TOAST-BEGIN]` and `[TOAST-END]` using `ConvertFrom-StringData`. The human-readable text above the block is never parsed. The buttons "Software Center öffnen" and "Schließen" are automatically included as defaults.
 
 ### The same example using short-form aliases (saves ~50% characters):
 
 ```
-This deployment installs 7-Zip 24.09 for all users.
+Dieses Deployment installiert 7-Zip 24.09 für alle Benutzer.
 
-#toast
 [TOAST-BEGIN]
-h=IT Department
-t=New Software Available: 7-Zip 24.09
-d=A new version of 7-Zip has been published to Software Center. Please install it at your earliest convenience.
-b2=This update includes important security fixes.
+h=IT-Abteilung
+t=Neue Software verfügbar: 7-Zip 24.09
+d=Eine neue Version von 7-Zip wurde im Software Center veröffentlicht. Bitte installieren Sie diese zeitnah.
+b2=Dieses Update enthält wichtige Sicherheitskorrekturen.
 dl=2026-03-15
-ab=Open Software Center
-a=softwarecenter:Page=Applications
-db=Remind me later
-sc=reminder
+u=warnung
 [TOAST-END]
 ```
 
 ### What the user sees:
 
 A Windows toast notification with:
-- **Header**: "IT Department"
-- **Title**: "Good morning, John — New Software Available: 7-Zip 24.09"
-- **Body**: "A new version of 7-Zip has been published to Software Center..."
-- **Secondary text**: "This update includes important security fixes."
-- **Buttons**: [Open Software Center] [Remind me later]
-- **Hero image**: Pre-staged default corporate banner (from local client path)
-- **Logo image**: Pre-staged default corporate logo (from local client path)
+- **Header**: "IT-Abteilung"
+- **Title**: "Guten Morgen, Max — Neue Software verfügbar: 7-Zip 24.09"
+- **Body**: "Eine neue Version von 7-Zip wurde im Software Center veröffentlicht..."
+- **Secondary text**: "Dieses Update enthält wichtige Sicherheitskorrekturen."
+- **Buttons**: [Software Center öffnen] [Schließen]
+- **Hero image**: Pre-staged warning-level banner (`hero-warnung.png`)
+- **Logo image**: Pre-staged warning-level logo (`logo-warnung.png`)
+
+> **Note:** Once 7-Zip 24.09 is installed successfully, this toast is automatically suppressed. The `[TOAST-BEGIN]` block can remain in the description permanently — it will simply stop producing toasts.
 
 ### The generated in-memory XML (produced by the script):
 
@@ -279,29 +324,32 @@ A Windows toast notification with:
     <Feature Name="PendingRebootUptime" Enabled="False" />
     <Feature Name="WeeklyMessage" Enabled="False" />
     <Option Name="CustomNotificationApp" Enabled="True" Value="IT NOTIFICATIONS" />
-    <Option Name="LogoImageName" Value="C:\ProgramData\ToastNotification\logo.png" />
-    <Option Name="HeroImageName" Value="C:\ProgramData\ToastNotification\hero.png" />
+    <Option Name="LogoImageName" Value="C:\ProgramData\ToastNotification\Images\logo-warnung.png" />
+    <Option Name="HeroImageName" Value="C:\ProgramData\ToastNotification\Images\hero-warnung.png" />
     <Option Name="ActionButton1" Enabled="True" />
     <Option Name="ActionButton2" Enabled="False" />
     <Option Name="DismissButton" Enabled="True" />
     <Option Name="SnoozeButton" Enabled="False" />
-    <Option Name="Scenario" Type="reminder" />
+    <Option Name="Scenario" Type="short" />
     <Option Name="Action1" Value="softwarecenter:Page=Applications" />
     <Option Name="Action2" Value="" />
-    <en-US>
-        <Text Name="HeaderText">IT Department</Text>
-        <Text Name="TitleText">New Software Available: 7-Zip 24.09</Text>
-        <Text Name="BodyText1">A new version of 7-Zip has been published to Software Center. Please install it at your earliest convenience.</Text>
-        <Text Name="BodyText2">This update includes important security fixes.</Text>
-        <Text Name="ActionButton1">Open Software Center</Text>
-        <Text Name="DismissButton">Remind me later</Text>
-        <Text Name="AttributionText">www.imab.dk</Text>
+    <de-DE>
+        <Text Name="HeaderText">IT-Abteilung</Text>
+        <Text Name="TitleText">Neue Software verfügbar: 7-Zip 24.09</Text>
+        <Text Name="BodyText1">Eine neue Version von 7-Zip wurde im Software Center veröffentlicht. Bitte installieren Sie diese zeitnah.</Text>
+        <Text Name="BodyText2">Dieses Update enthält wichtige Sicherheitskorrekturen.</Text>
+        <Text Name="ActionButton1">Software Center öffnen</Text>
+        <Text Name="DismissButton">Schließen</Text>
+        <Text Name="AttributionText">IT-Abteilung</Text>
+        <Text Name="GreetMorningText">Guten Morgen</Text>
+        <Text Name="GreetAfternoonText">Guten Tag</Text>
+        <Text Name="GreetEveningText">Guten Abend</Text>
         <!-- ... remaining text fields from base template ... -->
-    </en-US>
+    </de-DE>
 </Configuration>
 ```
 
-> **Note:** `LogoImageName` and `HeroImageName` default to locally pre-staged images. They are only overridden if the admin explicitly provides a `LogoImage` or `HeroImage` key in the `[TOAST-BEGIN]` block.
+> **Note:** `LogoImageName` and `HeroImageName` default to the `warnung` image set because `Urgency=warnung` was specified. The default buttons "Software Center öffnen" and "Schließen" are included automatically.
 
 ---
 
@@ -310,32 +358,51 @@ A Windows toast notification with:
 The simplest possible description to trigger a toast with all defaults:
 
 ```
-#toast
-```
-
-This triggers a toast on every logon using the base template defaults for all text and pre-staged images. No `[TOAST-BEGIN]` block is needed when all defaults are acceptable.
-
-A slightly more useful minimal example:
-
-```
-Important security update available. Please install from Software Center.
-
-#toast
 [TOAST-BEGIN]
-t=Please install the latest update
-d=A critical security update is available in Software Center.
+t=Neue Software verfügbar
+d=Bitte installieren Sie das neueste Update über das Software Center.
 [TOAST-END]
 ```
 
-> **Note:** Only two keys (`t` and `d`) are specified. Everything else — headline, images, buttons, scenario — comes from the base template defaults. This keeps the description field clean and well within character limits.
+Only two keys (`t` and `d`) are specified. Everything else — headline, images (Info level), buttons ("Software Center öffnen" / "Schließen"), scenario — uses the built-in defaults. This keeps the description field clean and well within character limits.
+
+> **Note:** Once the software is installed, this toast is automatically suppressed.
+
+### Three urgency examples side by side:
+
+**Info (default — no urgency tag needed):**
+```
+[TOAST-BEGIN]
+t=Neue optionale Software
+d=Eine neue Version von Notepad++ ist verfügbar.
+[TOAST-END]
+```
+
+**Warning:**
+```
+[TOAST-BEGIN]
+t=Wichtiges Update verfügbar
+d=Bitte installieren Sie das Update zeitnah.
+u=warnung
+[TOAST-END]
+```
+
+**Critical:**
+```
+[TOAST-BEGIN]
+t=Kritisches Sicherheitsupdate
+d=Ein kritisches Sicherheitsupdate muss sofort installiert werden.
+u=kritisch
+[TOAST-END]
+```
 
 ---
 
 ## Deployment Model
 
-### Scheduled Task (Logon Trigger)
+### Scheduled Task (Logon + Unlock Trigger)
 
-The solution is deployed as a **Scheduled Task** to all clients. This can be done via:
+The solution is deployed as a **Scheduled Task** to all clients with **two triggers**: user logon and workstation unlock. This can be done via:
 - Group Policy Preferences (GPP)
 - SCCM Task Sequence / Baseline
 - PowerShell script deployed via SCCM
@@ -345,11 +412,14 @@ The solution is deployed as a **Scheduled Task** to all clients. This can be don
 | Setting | Value |
 |---------|-------|
 | **Name** | `ToastNotification-SoftwareCenter` |
-| **Trigger** | At logon (any user) |
+| **Trigger 1** | At logon (any user) |
+| **Trigger 2** | On workstation unlock (Event Log: `Microsoft-Windows-Security-Auditing`, Event ID `4801`) |
 | **Action** | `powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File "C:\ProgramData\ToastNotification\Invoke-ToastFromSoftwareCenter.ps1"` |
 | **Run as** | Current logged-on user (not SYSTEM) |
 | **Conditions** | Run only when user is logged on |
 | **Settings** | Allow task to be run on demand; stop if running longer than 5 minutes |
+
+> **Note:** The workstation unlock trigger ensures users see pending notifications even after returning from a break or locking their PC. Combined with auto-suppress on install, this means: if the user installs the software and then locks/unlocks, no toast will appear. The unlock trigger uses Windows Security Event ID `4801` (workstation unlocked). Alternatively, a `SessionUnlock` trigger can be configured via the Task Scheduler `SessionStateChangeTrigger`.
 
 #### Files deployed to each client:
 
@@ -357,9 +427,14 @@ The solution is deployed as a **Scheduled Task** to all clients. This can be don
 C:\ProgramData\ToastNotification\
 ├── Invoke-ToastFromSoftwareCenter.ps1   ← New: Orchestrator script
 ├── Remediate-ToastNotification.ps1      ← Existing: Toast display engine
-├── config-toast-base-template.xml       ← Base template with defaults
-├── hero.png                             ← Pre-staged default hero image
-├── logo.png                             ← Pre-staged default logo image
+├── config-toast-base-template.xml       ← Base template with defaults (German)
+├── Images\
+│   ├── hero-info.png                    ← Info level hero image (blue/green)
+│   ├── logo-info.png                    ← Info level logo image
+│   ├── hero-warnung.png                 ← Warning level hero image (yellow/orange)
+│   ├── logo-warnung.png                 ← Warning level logo image
+│   ├── hero-kritisch.png                ← Critical level hero image (red)
+│   └── logo-kritisch.png               ← Critical level logo image
 └── Logs\
     └── SoftwareCenterToast.log          ← Runtime log
 ```
@@ -379,39 +454,47 @@ WMI Class:      CCM_Application          (for Applications)
 
 Key Properties:
   - Name                                 → Deployment display name
-  - Description                          → The field we parse for tags
-  - InstallState / ResolvedState         → Filter for "Available" state
+  - Description                          → The field we parse for the [TOAST-BEGIN] block
+  - InstallState / ResolvedState         → Used to check if already installed (auto-suppress)
   - Deadline                             → Native SCCM deadline (optional fallback)
 ```
 
-### Step 2 — Two-Pass Parsing: Filter for #toast Anchor (Pass 1)
+### Step 2 — Check Installation State (Auto-Suppress)
 
-The parser uses a **two-pass approach** to minimize false-match surface area:
+Before parsing the description, check whether the software is already installed:
 
-**Pass 1 — Anchor Detection:**
+1. Read `InstallState` (for `CCM_Application`) or `ResolvedState` (for `CCM_Program`)
+2. If the state indicates **installed** (e.g., `InstallState = "Installed"` for Applications, or the equivalent resolved state for Programs) → **skip this deployment entirely**
+3. Log: `INFO: Deployment '7-Zip 24.09' already installed — toast suppressed.`
+4. If **not installed** → proceed to Step 3
+
+This ensures that:
+- Users never see notifications for software they have already installed
+- The `[TOAST-BEGIN]` block can remain in the description permanently
+- No manual cleanup or deadline management is needed for completed deployments
+
+### Step 3 — Detect [TOAST-BEGIN] Block
+
+Scan the deployment description for the `[TOAST-BEGIN]` marker:
+
 1. Read the `Description` property of each deployment
-2. Scan for the string `#toast` (case-insensitive) anywhere in the description
-3. If `#toast` is **not** found → skip this deployment entirely
-4. If `#toast` **is** found → proceed to Pass 2
+2. Search for `[TOAST-BEGIN]` (case-insensitive)
+3. If `[TOAST-BEGIN]` is **not** found → skip this deployment (no toast configured)
+4. If `[TOAST-BEGIN]` **is** found → proceed to Step 4
 
-Everything before `#toast` is treated as plain human-readable text and is **ignored entirely**. This scopes all further parsing to a small, predictable portion of the description rather than the full free-form text.
+Everything outside the `[TOAST-BEGIN]`…`[TOAST-END]` markers is treated as plain human-readable text and is **ignored entirely**.
 
-### Step 3 — Extract Configuration: Structured Delimited Block (Pass 2)
+### Step 4 — Extract and Parse Configuration
 
-**Pass 2 — Structured Block Parsing:**
+Extract and parse the structured block:
 
-Instead of regex-scanning the entire description, the parser looks for a clearly fenced block between `[TOAST-BEGIN]` and `[TOAST-END]` markers:
+1. Extract the text between `[TOAST-BEGIN]` and `[TOAST-END]`
+2. Parse the extracted block using PowerShell's built-in `ConvertFrom-StringData` — **no regex needed**
+3. Resolve short-form aliases (e.g., `h` → `Headline`, `t` → `Title`, `u` → `Urgency`) using the alias mapping table
+4. Map resolved keys to their corresponding XML fields (see Tag-to-XML Mapping)
+5. Log warnings for unrecognized keys with fuzzy-match suggestions
 
-1. Search for `[TOAST-BEGIN]` in the description text (after the `#toast` anchor)
-2. If the markers are **not** found → use all base template defaults (the `#toast` anchor alone is enough to trigger a toast)
-3. If the markers **are** found → extract the text between `[TOAST-BEGIN]` and `[TOAST-END]`
-4. Parse the extracted block using PowerShell's built-in `ConvertFrom-StringData`, which handles simple `Key=Value` lines natively — **no regex needed**
-5. Resolve short-form aliases (e.g., `h` → `Headline`, `t` → `Title`) using the alias mapping table
-6. Map resolved keys to their corresponding XML fields (see Tag-to-XML Mapping)
-
-This approach completely eliminates false matches from regular description text and handles special characters natively via `ConvertFrom-StringData`.
-
-### Step 4 — Apply Date Filtering
+### Step 5 — Apply Date Filtering
 
 If `Deadline` is present in the parsed keys:
 - Parse the date value
@@ -421,24 +504,26 @@ If `StartDate` is present in the parsed keys:
 - Parse the date value
 - If today's date is **before** the start date → skip this deployment (no toast)
 
-### Step 5 — Duplicate Prevention
+### Step 6 — Duplicate Prevention
 
-To avoid showing the same toast on every logon:
+To avoid showing the same toast on every logon or unlock:
 - Maintain a small tracking file: `%APPDATA%\ToastNotificationScript\ShownToasts.json`
 - Store a hash of each deployment's `Name + Description` with a timestamp
-- On each logon, check if the toast for this deployment was already shown
+- On each logon or unlock, check if the toast for this deployment was already shown
 - Re-show a toast if the description has changed (hash mismatch) or a configurable interval has passed
 
-### Step 6 — Generate XML Configuration
+### Step 7 — Generate XML Configuration
 
-- Load the base template XML
+- Load the base template XML (German defaults)
+- Apply built-in defaults: ActionButton1 = "Software Center öffnen", DismissButton = "Schließen"
+- Select images based on `Urgency` level (default: `info`)
 - Override specific fields with values from parsed tags (see Tag-to-XML Mapping above)
 - The result is a complete in-memory `[xml]` object compatible with `Remediate-ToastNotification.ps1`
 
-### Step 7 — Display Toast
+### Step 8 — Display Toast
 
 - Call the existing toast display logic from `Remediate-ToastNotification.ps1`
-- The existing script handles: custom app registration, image downloads, greeting personalization, and WinRT notification display
+- The existing script handles: custom app registration, image display, greeting personalization, and WinRT notification display
 - Log success/failure per deployment
 - Log any unrecognized keys as warnings with fuzzy-match suggestions (see Error Handling)
 
@@ -446,11 +531,12 @@ To avoid showing the same toast on every logon:
 
 ## Multiple Deployments
 
-If multiple Software Center deployments contain `#toast`, **each one generates its own toast notification**. The script processes them sequentially with a short delay between notifications to avoid overwhelming the user.
+If multiple Software Center deployments contain a `[TOAST-BEGIN]` block, **each one generates its own toast notification** (provided the software is not already installed). The script processes them sequentially with a short delay between notifications to avoid overwhelming the user.
 
 Recommended behavior:
-- Process a maximum of **3 toast notifications per logon** (configurable)
-- Prioritize deployments with the nearest `#Deadline`
+- Process a maximum of **3 toast notifications per logon/unlock** (configurable)
+- Prioritize deployments with the nearest `Deadline`
+- Skip deployments where the software is already installed (auto-suppress)
 - Log skipped deployments for admin review
 
 ---
@@ -461,10 +547,11 @@ Recommended behavior:
 |----------|----------|
 | No SCCM client installed | Log warning, exit gracefully (exit code 0) |
 | No deployments found | Log info, exit gracefully |
-| No deployments with `#toast` | Log info, exit gracefully |
-| `#toast` found but no `[TOAST-BEGIN]` block | Log info, use all base template defaults |
+| No deployments with `[TOAST-BEGIN]` block | Log info, exit gracefully |
+| Software already installed | Log info, suppress toast (auto-suppress) |
 | Invalid tag value (e.g., bad date) | Log warning, skip that tag, use default |
 | Unrecognized key in `[TOAST-BEGIN]` block | Log warning with fuzzy-match suggestion (see below) |
+| Unknown `Urgency` value | Log warning, fall back to `info` image set |
 | WMI query fails | Log error, exit with error code |
 | Toast display fails | Log error per deployment, continue to next |
 
@@ -498,17 +585,16 @@ The fuzzy-match algorithm compares the unrecognized key against all known full t
 
 ## Future Extensions
 
-Once the basic `#toast` concept is proven, additional tags could be added:
+Once the basic concept is proven, additional tags could be added:
 
 | Tag | Purpose |
 |-----|---------|
-| `#SnoozeButton=<text>` | Enable snooze with custom button text |
-| `#Snooze` | Enable snooze with default text |
-| `#Priority=high` | Use `alarm` scenario for critical deployments |
-| `#Language=da-DK` | Force a specific language for the toast |
-| `#RepeatDays=3` | Re-show the toast every N days until deadline |
-| `#RequireAction` | Don't allow dismiss; user must click an action button |
-| `#DeadlineFromSCCM` | Use the native SCCM deployment deadline instead of a manual date |
+| `SnoozeButton=<text>` | Enable snooze with custom button text |
+| `Snooze` | Enable snooze with default text ("Später erinnern") |
+| `Priority=high` | Use `alarm` scenario for critical deployments |
+| `RepeatDays=3` | Re-show the toast every N days until deadline |
+| `RequireAction` | Don't allow dismiss; user must click an action button |
+| `DeadlineFromSCCM` | Use the native SCCM deployment deadline instead of a manual date |
 
 ---
 
@@ -516,18 +602,67 @@ Once the basic `#toast` concept is proven, additional tags could be added:
 
 | Aspect | Detail |
 |--------|--------|
-| **Trigger** | Scheduled Task at user logon |
+| **Trigger** | Scheduled Task at user logon and workstation unlock |
 | **Data Source** | Software Center deployment Description field (WMI) |
-| **Activation** | `#toast` anchor tag in description (two-pass parsing) |
-| **Configuration** | Structured `Key=Value` lines inside `[TOAST-BEGIN]`…`[TOAST-END]` block; supports short-form aliases |
-| **Parsing** | Pass 1: scan for `#toast` anchor. Pass 2: extract delimited block, parse with `ConvertFrom-StringData`, resolve aliases |
+| **Activation** | `[TOAST-BEGIN]`…`[TOAST-END]` block in description (no `#toast` anchor needed) |
+| **Configuration** | Structured `Key=Value` lines inside the block; supports short-form aliases |
+| **Parsing** | Single-pass: scan for `[TOAST-BEGIN]` marker, extract block, parse with `ConvertFrom-StringData`, resolve aliases |
+| **Auto-Suppress** | Toast automatically suppressed when software is already installed (WMI `InstallState` check) |
 | **Toast Engine** | Existing `Remediate-ToastNotification.ps1` (no changes needed to core script) |
 | **Config Format** | Keys are parsed, aliases resolved, and mapped to the existing XML `<Configuration>` format in-memory |
-| **Defaults** | Base template provides all defaults; images pre-staged on client; admins specify only overrides |
-| **Deployment** | One-time deployment of scheduled task + script files + pre-staged images to all clients |
+| **Default Buttons** | "Software Center öffnen" + "Schließen" — always present without configuration |
+| **Default Images** | 3 urgency-based image sets (Info/Warnung/Kritisch) pre-staged locally on client |
+| **Defaults** | All other parameters unset unless explicitly specified; only `Title` and `Description` are typically needed |
+| **Language** | All user-facing toast text in German (de-DE) |
+| **Deployment** | One-time deployment of scheduled task + script files + 3 image sets to all clients |
 | **Duplicate Prevention** | Hash-based tracking in `%APPDATA%` per user |
-| **Multiple Toasts** | Each `#toast`-tagged deployment generates its own notification (max 3 per logon) |
+| **Multiple Toasts** | Each deployment with a `[TOAST-BEGIN]` block generates its own notification (max 3 per trigger, auto-suppress on install) |
 | **Error Feedback** | Unrecognized keys logged as warnings with fuzzy-match suggestions |
+
+---
+
+## POC Simplification Suggestions
+
+The following recommendations make the proof-of-concept as simple and fast to implement as possible:
+
+### 1. Start with a Single Deployment
+
+For the initial POC, configure just **one** Software Center deployment with a `[TOAST-BEGIN]` block. Validate the full flow end-to-end before adding more deployments.
+
+### 2. Use Only `Title` and `Description`
+
+The minimal configuration is just two lines. Don't configure buttons, images, scenario, or scheduling for the first test — all defaults handle it:
+
+```
+[TOAST-BEGIN]
+t=Test-Benachrichtigung
+d=Dies ist ein Test der Toast-Benachrichtigungen.
+[TOAST-END]
+```
+
+### 3. Pre-Stage Images Once, Forget About Them
+
+Deploy all 6 image files (3 urgency levels × 2 images each) to the client once. After that, the `Urgency` tag (or the default `info` level) handles image selection automatically — no URLs needed.
+
+### 4. Skip Scheduling Tags for POC
+
+Don't set `Deadline` or `StartDate` during the POC. The auto-suppress on install is the primary lifecycle mechanism — toasts disappear automatically once the software is installed.
+
+### 5. Test with the Unlock Trigger
+
+The workstation unlock trigger is the fastest way to iterate during POC testing: lock the PC, unlock it, and see if the toast appears. No need to log off and on again.
+
+### 6. Use a Tracking-Free Test Mode
+
+For rapid POC testing, consider a `-TestMode` switch on the orchestrator script that skips duplicate prevention and always shows the toast, regardless of whether it was shown before.
+
+### 7. Validate Auto-Suppress Manually
+
+Install the test software, then lock/unlock the PC. Confirm that the toast **does not** appear after installation. This is the key validation for the auto-suppress feature.
+
+### 8. Keep the Description Field Clean
+
+Place the human-readable description text above the `[TOAST-BEGIN]` block. End users in Software Center will see the description text; the toast block at the bottom is visually ignorable.
 
 ---
 
@@ -535,25 +670,31 @@ Once the basic `#toast` concept is proven, additional tags could be added:
 
 The following mitigations address the downsides identified in the [Summary evaluation](SUMMARY-SoftwareCenter-ToastIntegration.md) and are incorporated into this concept design:
 
-### 1. Clearly Delimited Block at the Bottom
+### 1. Clearly Delimited Block
 
 **Addresses:** Description field pollution (end users seeing technical markup in Software Center).
 
-The human-readable deployment description stays at the top of the field. A `[TOAST-BEGIN]`…`[TOAST-END]` block at the bottom contains all toast configuration. End users who browse Software Center see the descriptive text first; the fenced block at the bottom is visually distinct and can be ignored. The `#toast` anchor tag acts as a separator convention — everything above it is plain text, everything below it (inside the markers) is configuration.
+The human-readable deployment description stays at the top of the field. A `[TOAST-BEGIN]`…`[TOAST-END]` block contains all toast configuration. End users who browse Software Center see the descriptive text first; the fenced block is visually distinct and can be ignored. Everything outside the markers is plain text and is never parsed.
 
 ### 2. Short-Form Tag Aliases
 
 **Addresses:** Character length constraints in the SCCM description field.
 
-Compact aliases are supported alongside full tag names: `h=` for `Headline`, `t=` for `Title`, `d=` for `Description`, etc. A mapping table in the client-side script converts short aliases to their full names internally before processing. This cuts tag overhead by 50–70%, leaving more room for the human-readable description and keeping the total within SCCM character limits. See the [Short-Form Alias Mapping Table](#short-form-alias-mapping-table) above for the complete list.
+Compact aliases are supported alongside full tag names: `h=` for `Headline`, `t=` for `Title`, `d=` for `Description`, `u=` for `Urgency`, etc. A mapping table in the client-side script converts short aliases to their full names internally before processing. This cuts tag overhead by 50–70%, leaving more room for the human-readable description and keeping the total within SCCM character limits. See the [Short-Form Alias Mapping Table](#short-form-alias-mapping-table) above for the complete list.
 
 ### 3. Lean on Defaults Aggressively
 
 **Addresses:** Character length constraints and configuration complexity.
 
-The base template already provides sensible defaults for every configuration value. Administrators are encouraged to specify **only the keys that differ** from the template. In practice, most toasts need only `toast`, `Title`, and `Description` — well within any character limit. Logo and Hero images are **pre-staged on the client** at deployment time (stored under `C:\ProgramData\ToastNotification\`), so there is no need to specify image URLs in the description field unless a deployment-specific image is required. This dramatically reduces the number of keys needed in the `[TOAST-BEGIN]` block.
+All parameters are unset by default except the two standard buttons ("Software Center öffnen" / "Schließen") and the Info-level images. Administrators are encouraged to specify **only the keys that differ** — in practice, most toasts need only `Title` and `Description`. Logo and Hero images are **pre-staged on the client** in 3 urgency-based sets, so there is no need to specify image URLs. This dramatically reduces the number of keys needed in the `[TOAST-BEGIN]` block.
 
-### 4. Log-Level Feedback with Fuzzy-Match Suggestions
+### 4. Auto-Suppress on Successful Installation
+
+**Addresses:** Toast lifecycle management and stale notifications.
+
+The script checks the WMI `InstallState` before displaying a toast. Once the software is installed, the toast is automatically suppressed. This eliminates the need for manual `Deadline` management for most deployments and ensures users never see notifications for software they already have.
+
+### 5. Log-Level Feedback with Fuzzy-Match Suggestions
 
 **Addresses:** No authoring-time validation (typos in tag names silently fall back to defaults).
 
@@ -561,14 +702,8 @@ When the client-side script encounters an unrecognized key inside the `[TOAST-BE
 - Review centralized logs to identify misconfigurations across the estate
 - Run the script in **test mode** on a single machine to validate a new deployment's description before broad rollout
 
-### 5. Structured Delimited Block with ConvertFrom-StringData
+### 6. Structured Delimited Block with ConvertFrom-StringData
 
 **Addresses:** Fragile regex-based parsing of free-text description fields.
 
-Instead of regex-scanning the entire description, the toast config must live inside a clearly fenced block between `[TOAST-BEGIN]` and `[TOAST-END]` markers. Within this block, PowerShell's built-in `ConvertFrom-StringData` cmdlet parses simple `Key=Value` lines — no regex needed. This completely eliminates false matches from regular description text (e.g., `#` symbols in prose, special characters, multi-line values) and handles escaping natively. The parser never touches text outside the fenced block.
-
-### 6. Two-Pass Parsing with Anchor Tag
-
-**Addresses:** Fragile regex-based parsing; false-match surface area.
-
-Parsing only begins after the `#toast` anchor is found (Pass 1). Everything before `#toast` is treated as plain text and ignored entirely. Only after confirming the anchor does the parser look for and extract the `[TOAST-BEGIN]`…`[TOAST-END]` block (Pass 2). This scopes all parsing to a small, predictable block of text rather than the full free-form description, dramatically reducing the risk of false matches or unintended tag extraction from regular prose.
+Instead of regex-scanning the entire description, the toast config must live inside a clearly fenced block between `[TOAST-BEGIN]` and `[TOAST-END]` markers. Within this block, PowerShell's built-in `ConvertFrom-StringData` cmdlet parses simple `Key=Value` lines — no regex needed. This completely eliminates false matches from regular description text and handles escaping natively. The parser never touches text outside the fenced block.
