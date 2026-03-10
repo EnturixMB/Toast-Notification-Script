@@ -413,11 +413,11 @@ This approach completely eliminates false matches from regular description text 
 
 ### Step 4 — Apply Date Filtering
 
-If `#Deadline` is present:
+If `Deadline` is present in the parsed keys:
 - Parse the date value
 - If today's date is **after** the deadline → skip this deployment (no toast)
 
-If `#StartDate` is present:
+If `StartDate` is present in the parsed keys:
 - Parse the date value
 - If today's date is **before** the start date → skip this deployment (no toast)
 
