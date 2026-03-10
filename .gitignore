@@ -39,6 +39,10 @@ test/
 testing/
 *test*
 
+# Exception: Keep POC TestEnvironment folder
+!TestEnvironment/
+!TestEnvironment/**
+
 # Personal/Local config files
 config-local*.xml
 *-local.*
