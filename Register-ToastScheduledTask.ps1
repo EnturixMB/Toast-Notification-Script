@@ -122,8 +122,8 @@ $principal = New-ScheduledTaskPrincipal -GroupId "BUILTIN\Users" -RunLevel Limit
 #   RunOnlyIfLoggedOn        : Task runs only when a user session is active
 #   AllowDemandStart         : Allows manual triggering of the task
 #   ExecutionTimeLimit       : Kills the task if it runs longer than 5 minutes
-#   DisallowStartIfOnBatteries : Allows the task to start on battery power
-#   StopIfGoingOnBatteries   : Keeps the task running if switching to battery
+#   AllowStartIfOnBatteries  : Allows the task to start on battery power
+#   DontStopIfGoingOnBatteries : Keeps the task running if switching to battery
 # =============================================================================
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
