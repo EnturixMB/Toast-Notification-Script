@@ -148,11 +148,21 @@ foreach ($img in $requiredImages) {
 }
 
 # =============================================================================
-# Step 4: Register Scheduled Task (optional)
+# Step 4: Unblock deployed files
+# Downloaded files may carry a Zone.Identifier stream that blocks execution.
+# =============================================================================
+Write-Host ""
+Write-Host "  Step 4: Unblocking deployed files..." -ForegroundColor White
+
+Get-ChildItem -Path $TargetPath -Recurse | Unblock-File
+Write-Host "    [OK] All files unblocked." -ForegroundColor Green
+
+# =============================================================================
+# Step 5: Register Scheduled Task (optional)
 # =============================================================================
 if (-not $SkipScheduledTask) {
     Write-Host ""
-    Write-Host "  Step 4: Registering scheduled task..." -ForegroundColor White
+    Write-Host "  Step 5: Registering scheduled task..." -ForegroundColor White
 
     $registerScript = Join-Path $TargetPath "Register-ToastScheduledTask.ps1"
     try {
@@ -167,14 +177,14 @@ if (-not $SkipScheduledTask) {
 }
 else {
     Write-Host ""
-    Write-Host "  Step 4: Skipped scheduled task registration (-SkipScheduledTask)." -ForegroundColor Yellow
+    Write-Host "  Step 5: Skipped scheduled task registration (-SkipScheduledTask)." -ForegroundColor Yellow
 }
 
 # =============================================================================
-# Step 5: Validate deployment
+# Step 6: Validate deployment
 # =============================================================================
 Write-Host ""
-Write-Host "  Step 5: Validating deployment..." -ForegroundColor White
+Write-Host "  Step 6: Validating deployment..." -ForegroundColor White
 
 $allValid = $true
 foreach ($file in $requiredFiles) {
